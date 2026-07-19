@@ -1360,47 +1360,55 @@ def perspectives_html(perspectives: Any) -> str:
 def render_workspace_html(data: dict[str, Any]) -> str:
     return f"""
 <section class="cn-workspace">
-  <nav class="cn-workspace-tabs" aria-label="Workspace windows">
-    <a href="#perspectives">Perspectives</a>
-    <a href="#exposure">Exposure</a>
-    <a href="#gaps">Gaps</a>
-    <a href="#plan">Plan</a>
-    <a href="#roadmap">Roadmap</a>
-    <a href="#courses">Courses</a>
-    <a href="#narrative">Narrative</a>
-    <a href="#feedback">Feedback</a>
-  </nav>
-  <div class="cn-window-board">
-    <section id="perspectives" class="cn-work-section cn-window cn-window-wide">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-perspectives" checked>
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-exposure">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-gaps">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-plan">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-roadmap">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-courses">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-narrative">
+  <input class="cn-tab-input" type="radio" name="cn-workspace-tab" id="cn-tab-feedback">
+  <div class="cn-workspace-tabs" role="tablist" aria-label="Workspace windows">
+    <label role="tab" for="cn-tab-perspectives">Perspectives</label>
+    <label role="tab" for="cn-tab-exposure">Exposure</label>
+    <label role="tab" for="cn-tab-gaps">Gaps</label>
+    <label role="tab" for="cn-tab-plan">Plan</label>
+    <label role="tab" for="cn-tab-roadmap">Roadmap</label>
+    <label role="tab" for="cn-tab-courses">Courses</label>
+    <label role="tab" for="cn-tab-narrative">Narrative</label>
+    <label role="tab" for="cn-tab-feedback">Feedback</label>
+  </div>
+  <div class="cn-tab-panels">
+    <section id="perspectives" class="cn-tab-panel cn-tab-perspectives-panel cn-work-section cn-window cn-window-wide">
       <div class="cn-window-bar"><span>00</span><h2>Directions to test first</h2></div>
       <div class="cn-card-grid">{perspectives_html(data.get("perspectives"))}</div>
     </section>
-    <section id="exposure" class="cn-work-section cn-window">
+    <section id="exposure" class="cn-tab-panel cn-tab-exposure-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>01</span><h2>Where AI changes the work</h2></div>
       <p>{escape_html(data.get("exposure_summary") or "")}</p>
       <div class="cn-card-grid">{exposure_cards_html(data.get("exposure"))}</div>
     </section>
-    <section id="gaps" class="cn-work-section cn-window">
+    <section id="gaps" class="cn-tab-panel cn-tab-gaps-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>02</span><h2>Development gaps</h2></div>
       <div class="cn-card-grid">{gaps_html(data.get("gaps"))}</div>
     </section>
-    <section id="plan" class="cn-work-section cn-window">
+    <section id="plan" class="cn-tab-panel cn-tab-plan-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>03</span><h2>Your first 100 days</h2></div>
       <div class="cn-stack">{plan_100_html(data.get("plan_100"))}</div>
     </section>
-    <section id="roadmap" class="cn-work-section cn-window">
+    <section id="roadmap" class="cn-tab-panel cn-tab-roadmap-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>04</span><h2>365-day roadmap</h2></div>
       <div class="cn-card-grid">{roadmap_html(data.get("plan_365"), data.get("decision_gates"))}</div>
     </section>
-    <section id="courses" class="cn-work-section cn-window">
+    <section id="courses" class="cn-tab-panel cn-tab-courses-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>05</span><h2>Courses and resources</h2></div>
       <div class="cn-stack">{course_cards_html(data.get("resources"), data.get("course_fallbacks"))}</div>
     </section>
-    <section id="narrative" class="cn-work-section cn-window">
+    <section id="narrative" class="cn-tab-panel cn-tab-narrative-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>06</span><h2>Narrative</h2></div>
       {narrative_html(data.get("repositioning"), data.get("closing_note") or "")}
     </section>
-    <section id="feedback" class="cn-work-section cn-window">
+    <section id="feedback" class="cn-tab-panel cn-tab-feedback-panel cn-work-section cn-window">
       <div class="cn-window-bar"><span>07</span><h2>What to challenge next</h2></div>
       <div class="cn-feedback-grid">
         <article class="cn-work-card"><h3>This is wrong</h3><p>Mark assumptions, missing context, or recommendations that do not fit your real constraints.</p></article>
@@ -2296,7 +2304,12 @@ footer,
 .cn-workspace {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
+}
+.cn-tab-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 .cn-workspace-tabs {
   position: sticky;
@@ -2305,26 +2318,52 @@ footer,
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0 0 12px;
+  padding: 0 0 10px;
   background: rgba(17,26,21,.92);
   backdrop-filter: blur(10px);
 }
-.cn-workspace-tabs a {
+.cn-workspace-tabs label {
   border: 1px solid var(--cn-line);
   border-radius: 8px;
   padding: 7px 10px;
   color: var(--cn-text);
   text-decoration: none;
   font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(255,255,255,.025);
 }
-.cn-workspace-tabs a:hover {
+.cn-workspace-tabs label:hover {
   border-color: rgba(104,211,145,.5);
 }
-.cn-window-board {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-items: start;
+.cn-tab-panels {
+  min-height: min(640px, calc(100vh - 190px));
+  overflow: auto;
+}
+.cn-tab-panel {
+  display: none;
+}
+#cn-tab-perspectives:checked ~ .cn-workspace-tabs label[for="cn-tab-perspectives"],
+#cn-tab-exposure:checked ~ .cn-workspace-tabs label[for="cn-tab-exposure"],
+#cn-tab-gaps:checked ~ .cn-workspace-tabs label[for="cn-tab-gaps"],
+#cn-tab-plan:checked ~ .cn-workspace-tabs label[for="cn-tab-plan"],
+#cn-tab-roadmap:checked ~ .cn-workspace-tabs label[for="cn-tab-roadmap"],
+#cn-tab-courses:checked ~ .cn-workspace-tabs label[for="cn-tab-courses"],
+#cn-tab-narrative:checked ~ .cn-workspace-tabs label[for="cn-tab-narrative"],
+#cn-tab-feedback:checked ~ .cn-workspace-tabs label[for="cn-tab-feedback"] {
+  border-color: rgba(104,211,145,.62);
+  background: rgba(104,211,145,.13);
+  color: var(--cn-primary);
+}
+#cn-tab-perspectives:checked ~ .cn-tab-panels .cn-tab-perspectives-panel,
+#cn-tab-exposure:checked ~ .cn-tab-panels .cn-tab-exposure-panel,
+#cn-tab-gaps:checked ~ .cn-tab-panels .cn-tab-gaps-panel,
+#cn-tab-plan:checked ~ .cn-tab-panels .cn-tab-plan-panel,
+#cn-tab-roadmap:checked ~ .cn-tab-panels .cn-tab-roadmap-panel,
+#cn-tab-courses:checked ~ .cn-tab-panels .cn-tab-courses-panel,
+#cn-tab-narrative:checked ~ .cn-tab-panels .cn-tab-narrative-panel,
+#cn-tab-feedback:checked ~ .cn-tab-panels .cn-tab-feedback-panel {
+  display: flex;
 }
 .cn-work-section {
   display: flex;
@@ -2341,7 +2380,7 @@ footer,
   box-shadow: 0 16px 34px rgba(0,0,0,.14);
 }
 .cn-window-wide {
-  grid-column: 1 / -1;
+  width: 100%;
 }
 .cn-window-bar {
   display: flex;
@@ -2545,9 +2584,12 @@ button.primary {
   .cn-card-grid,
   .cn-course-grid,
   .cn-two-column,
-  .cn-feedback-grid,
-  .cn-window-board {
+  .cn-feedback-grid {
     grid-template-columns: 1fr;
+  }
+  .cn-tab-panels {
+    min-height: auto;
+    overflow: visible;
   }
   .cn-shell {
     min-height: auto;

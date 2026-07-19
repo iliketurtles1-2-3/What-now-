@@ -377,7 +377,9 @@ class AppCoreTests(unittest.TestCase):
         )
 
         self.assertIn('class="cn-workspace"', html)
-        self.assertIn('class="cn-window-board"', html)
+        self.assertIn('class="cn-tab-panels"', html)
+        self.assertIn('type="radio"', html)
+        self.assertIn('for="cn-tab-perspectives"', html)
         self.assertIn("<details", html)
         self.assertIn("Directions to test first", html)
         self.assertIn("Climate partnerships operator", html)
