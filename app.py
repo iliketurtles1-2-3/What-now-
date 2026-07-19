@@ -491,6 +491,7 @@ def write_report_file(markdown: str) -> str:
 
 
 def start_analysis(uploaded_file: Any, cv_text: str | None):
+    print("DEBUG start_analysis called", flush=True)
     try:
         content = build_cv_content(uploaded_file, cv_text)
         result = call_json(PROMPT_1, content, 2000)
@@ -529,6 +530,7 @@ def enforce_budget_rules(report_data: dict[str, Any], learning_budget: str) -> d
 
 
 def create_report(profile: dict[str, Any], adaptation: str, time_budget: str, learning_budget: str, trigger: str):
+    print("DEBUG create_report called", flush=True)
     try:
         if not profile:
             raise ValueError(CV_ERROR)
@@ -563,6 +565,7 @@ def create_report(profile: dict[str, Any], adaptation: str, time_budget: str, le
 
 
 def reset_app():
+    print("DEBUG reset_app called", flush=True)
     return (
         gr.update(visible=True),
         gr.update(visible=False),
@@ -600,7 +603,7 @@ CSS = """
   font-family: Inter, system-ui, sans-serif !important;
 }
 .container {
-  max-width: 1180px;
+  width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
 }
 .upload-shell {
@@ -626,7 +629,7 @@ CSS = """
   font-size: 13.5px;
 }
 .cn-shell {
-  min-height: 680px;
+  min-height: min(680px, calc(100vh - 48px));
   background: #070d0a;
   background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
   padding: 28px 0 8px;
@@ -674,7 +677,7 @@ CSS = """
 }
 .cn-grid {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr);
   gap: 22px;
   flex: 1;
   min-height: 0;
@@ -716,13 +719,14 @@ CSS = """
 }
 .cn-messages {
   flex: 1;
+  min-height: 180px;
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 .cn-assistant {
-  max-width: 82%;
+  max-width: min(82%, 680px);
   font-size: 14px;
   line-height: 1.6;
   color: var(--cn-text);
@@ -733,7 +737,7 @@ CSS = """
 }
 .cn-user {
   align-self: flex-end;
-  max-width: 70%;
+  max-width: min(70%, 520px);
   background: rgba(255,255,255,.05);
   border-radius: 14px;
   padding: 10px 15px;
@@ -796,6 +800,14 @@ CSS = """
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: flex-start;
+}
+.cn-row span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cn-row span:last-child {
+  flex: 0 0 auto;
 }
 .cn-muted {
   color: var(--cn-muted);
@@ -829,6 +841,9 @@ button.primary {
   color: var(--cn-text);
 }
 @media (max-width: 900px) {
+  .container {
+    width: min(100%, calc(100vw - 20px));
+  }
   .cn-grid {
     grid-template-columns: 1fr;
   }
@@ -837,7 +852,40 @@ button.primary {
     flex-direction: column;
   }
   .cn-chat-panel {
-    padding: 24px;
+    padding: 22px;
+  }
+  .cn-shell {
+    min-height: auto;
+    padding-top: 18px;
+  }
+  .cn-sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .cn-side-card {
+    min-height: 150px;
+  }
+  .interview-panel .form {
+    min-width: 0 !important;
+  }
+}
+@media (max-width: 640px) {
+  .upload-panel {
+    padding: 22px;
+  }
+  .upload-panel h1,
+  .cn-heading h1 {
+    font-size: 26px;
+  }
+  .cn-sidebar {
+    grid-template-columns: 1fr;
+  }
+  .cn-assistant,
+  .cn-user {
+    max-width: 100%;
+  }
+  .interview-panel {
+    padding: 18px;
   }
 }
 """
@@ -859,7 +907,7 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
         teaser_markdown = gr.HTML()
         with gr.Column(elem_classes="interview-panel"):
             gr.Markdown("## Kurzinterview")
-            gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird.")
+            gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird. Die Report-Erstellung kann mit großen Modellen 60–120 Sekunden dauern.")
             with gr.Row():
                 adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
                 time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
@@ -867,6 +915,7 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
                 learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
                 trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=4)
             report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
+            gr.Markdown("Während der Erstellung bleibt diese Ansicht sichtbar. Warte bitte, bis der Report automatisch erscheint.", elem_classes="privacy")
             interview_error = gr.Markdown()
 
     with gr.Column(visible=False, elem_classes=["container", "report-shell"]) as screen_report:
@@ -915,4 +964,4 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
 
 
 if __name__ == "__main__":
-    demo.queue(default_concurrency_limit=4).launch(server_name="0.0.0.0", server_port=7860)
+    demo.queue(default_concurrency_limit=4).launch(server_name="0.0.0.0", server_port=7860, show_error=True)
