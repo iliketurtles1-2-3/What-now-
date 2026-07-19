@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import traceback
+import base64
 import html as html_lib
 import urllib.error
 import urllib.parse
@@ -24,8 +25,8 @@ DEFAULT_MODELS = {
 }
 MODEL = os.getenv("LLM_MODEL", DEFAULT_MODELS.get(LLM_PROVIDER, "claude-sonnet-4-6"))
 MAX_PDF_BYTES = 10 * 1024 * 1024
-CV_ERROR = "Der Lebenslauf konnte nicht gelesen werden. Bitte lade ein PDF hoch oder füge den Text direkt ein."
-API_ERROR = "Die Analyse ist gerade nicht verfügbar. Bitte versuche es in einer Minute erneut."
+CV_ERROR = "I could not read the CV. Please upload a PDF or paste at least 300 characters of CV text."
+API_ERROR = "The analysis is not available right now. Please try again in a minute."
 LIVE_DATA_TIMEOUT = float(os.getenv("LIVE_DATA_TIMEOUT", "8"))
 ARBEITNOW_BASE_URL = os.getenv("ARBEITNOW_BASE_URL", "https://www.arbeitnow.com/api/job-board-api")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
@@ -33,17 +34,17 @@ SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
 LIVE_SEARCH_PROVIDER = os.getenv("LIVE_SEARCH_PROVIDER", "tavily" if TAVILY_API_KEY else "serpapi").strip().lower()
 
 ADAPTATION_OPTIONS = [
-    "🟢 Optimieren – Ich will in meiner Rolle bleiben und smarter mit KI arbeiten",
-    "🟡 Weiterentwickeln – Ich bin offen für einen Rollenwechsel in 6–12 Monaten",
-    "🔴 Neu erfinden – Ich bin bereit für einen echten Pivot",
+    "Optimize - I want to stay in my role and use AI better",
+    "Develop - I am open to a role move in 6-12 months",
+    "Reinvent - I am ready for a real pivot",
 ]
-TIME_OPTIONS = ["< 2 Std./Woche", "2–5 Std./Woche", "5–10 Std./Woche", "> 10 Std./Woche"]
-BUDGET_OPTIONS = ["0 € (nur kostenlos)", "bis 50 €/Monat", "über 50 €/Monat"]
+TIME_OPTIONS = ["< 2 hours/week", "2-5 hours/week", "5-10 hours/week", "> 10 hours/week"]
+BUDGET_OPTIONS = ["0 EUR (free only)", "up to 50 EUR/month", "over 50 EUR/month"]
 
 PROMPT_1 = """
-Du bist ein Karriereanalyst, spezialisiert auf die Auswirkungen von KI auf Berufsbilder. Du erhältst einen Lebenslauf. Extrahiere ein strukturiertes Profil und formuliere drei prägnante erste Beobachtungen.
+You are a career analyst specialized in how AI changes professional work. You receive a CV. Extract a structured profile and write three concise first observations.
 
-Antworte NUR mit validem JSON, exakt in diesem Schema:
+Reply ONLY with valid JSON, exactly in this schema:
 {
   "profile": {
     "current_role": string,
@@ -59,29 +60,29 @@ Antworte NUR mit validem JSON, exakt in diesem Schema:
   "teaser": [string, string, string]
 }
 
-Regeln für die Teaser-Beobachtungen:
-- Jede Beobachtung 1–2 Sätze, auf Deutsch, per Du.
-- Beobachtung 1: Stärkstes Asset des Profils im KI-Zeitalter.
-- Beobachtung 2: Eine konkrete, ehrliche Exponierung (welche Tätigkeiten sich durch KI stark verändern werden) – ohne Panikmache, mit Begründung.
-- Beobachtung 3: Eine überraschende oder nicht offensichtliche Chance, die sich aus dem Profil ergibt.
-- Sei spezifisch: beziehe dich auf konkrete Stationen/Tätigkeiten aus dem Lebenslauf, nie generisch.
-- "ai_tool_signals": alle Hinweise auf bereits vorhandene KI-Tool-Nutzung; leere Liste wenn keine.
+Rules for the teaser observations:
+- Each observation is 1-2 sentences, in English, speaking directly to the user as "you".
+- Observation 1: the profile's strongest asset in the AI era.
+- Observation 2: one concrete, honest exposure area, meaning tasks likely to change strongly through AI, with reasoning and without fearmongering.
+- Observation 3: one surprising or non-obvious opportunity that follows from the profile.
+- Be specific: refer to concrete roles, tasks, or experiences from the CV, never generic career advice.
+- "ai_tool_signals": all hints of existing AI tool use; empty list if none.
 """.strip()
 
 PROMPT_2 = """
-Du bist ein Karrierestratege für die KI-Ökonomie. Du erhältst ein strukturiertes Berufsprofil und die Antworten aus einem Kurzinterview. Erstelle einen persönlichen Report.
+You are a career strategist for the AI economy. You receive a structured professional profile and answers from a short interview. Create a personal in-app career workspace.
 
-GRUNDPRINZIPIEN:
-- Sprich den Nutzer mit Du an. Deutsch. Konkret statt generisch: Jede Aussage muss sich erkennbar auf DIESES Profil beziehen. Wenn zwei verschiedene Lebensläufe denselben Report bekämen, hast du versagt.
-- Ehrlichkeit über Unsicherheit: Formuliere KI-Exponierung als "Veränderungsdruck", nicht als Ersetzungs-Prophezeiung. Begründe jede Einschätzung.
-- RESSOURCEN-REGEL (kritisch): Empfiehl NUR real existierende, breit bekannte Anbieter (z. B. Coursera, DeepLearning.AI, fast.ai, Google Skillshop, LinkedIn Learning, Udemy, edX, Maven, lokale IHK-Angebote, Meetup). Erfinde NIEMALS Kursnamen. Wenn du keinen konkreten Kurs sicher kennst, schreibe stattdessen: "Suche nach: [Kurstyp-Beschreibung]".
-- Das Adaptionslevel steuert die Tiefe: Optimieren = kleine Schritte in der aktuellen Rolle; Weiterentwickeln = angrenzende Rollen, ein Portfolio-Projekt; Neu erfinden = vollständige Brücke inkl. Bewerbungsphase.
-- Zeitbudget und Lernbudget sind harte Constraints: Empfiehl nichts, was sie überschreitet. Bei Budget "0 €" ausschließlich kostenlose Ressourcen.
+PRINCIPLES:
+- Write in English and address the user directly as "you". Be concrete: every statement must visibly depend on THIS profile.
+- Be honest about uncertainty. Treat AI exposure as change pressure, not a replacement prophecy, and explain each assessment.
+- COURSE RULE, critical: recommend only real, broadly known providers such as Coursera, DeepLearning.AI, fast.ai, Google Skillshop, LinkedIn Learning, Udemy, edX, Maven, local chambers of commerce, or Meetup. Never invent course names. If you are not sure a specific course exists, write "Search for: [course type description]" instead.
+- The adaptation level controls depth: Optimize = small improvements in the current role; Develop = adjacent roles and one portfolio project; Reinvent = a full bridge including application phase.
+- Time and learning budget are hard constraints. Recommend nothing that exceeds them. If budget is "0 EUR", include only free resources.
 
-Antworte NUR mit validem JSON, exakt in diesem Schema:
+Reply ONLY with valid JSON, exactly in this schema:
 {
   "exposure": [
-    {"task": string, "rating": "gruen" | "gelb" | "rot", "reasoning": string}
+    {"task": string, "rating": "green" | "yellow" | "red", "reasoning": string}
   ],
   "exposure_summary": string,
   "gaps": [
@@ -97,7 +98,7 @@ Antworte NUR mit validem JSON, exakt in diesem Schema:
     {"when": string, "question": string, "if_yes": string, "if_no": string}
   ],
   "resources": [
-    {"gap": string, "free": [{"name": string, "format": "Kurs" | "Projekt" | "Community" | "On-the-Job", "time_cost": string}], "paid": [{"name": string, "format": string, "cost_estimate": string, "time_cost": string}]}
+    {"gap": string, "free": [{"name": string, "format": "Course" | "Project" | "Community" | "On-the-job", "time_cost": string}], "paid": [{"name": string, "format": string, "cost_estimate": string, "time_cost": string}]}
   ],
   "repositioning": {
     "cv_bullets": [string, string, string],
@@ -106,15 +107,15 @@ Antworte NUR mit validem JSON, exakt in diesem Schema:
   "closing_note": string
 }
 
-MENGENVORGABEN:
-- exposure: 5–8 Aufgaben aus dem realen Profil, jede mit 1-Satz-Begründung.
-- gaps: genau 3 (Optimieren: 2 reichen).
-- plan_100: 3–4 Blöcke in Wochen-Granularität (z. B. "Woche 1–2"), endet mit einem konkreten Artefakt.
-- plan_365: 4 Quartale; Q1 verweist auf den 100-Tage-Plan.
-- decision_gates: genau 2.
-- resources: pro Gap mindestens 1 kostenlose Option; bezahlte nur wenn Budget > 0 €.
-- cv_bullets: umgeschriebene Bullets basierend auf echten Stationen des Profils, Ton passend zum Adaptionslevel.
-- closing_note: 2–3 Sätze, motivierend aber nüchtern, keine Floskeln.
+QUANTITY RULES:
+- exposure: 5-8 tasks from the real profile, each with one-sentence reasoning.
+- gaps: exactly 3, but Optimize may use 2 if that is more honest.
+- plan_100: 3-4 blocks in week granularity, e.g. "Weeks 1-2", ending with a concrete artifact.
+- plan_365: 4 quarters; Q1 references the 100-day plan.
+- decision_gates: exactly 2.
+- resources: at least 1 free course/project option per gap; paid only if budget is above 0 EUR.
+- cv_bullets: rewritten bullets based on real profile experiences, tone matched to the adaptation level.
+- closing_note: 2-3 sentences, grounded and motivating, no fluff.
 """.strip()
 
 
@@ -251,8 +252,10 @@ def build_cv_content(uploaded_file: Any, cv_text: str | None) -> Any:
 
     if text:
         if len(text) < 300:
-            raise ValueError(CV_ERROR)
-        return f"Analysiere diesen eingefügten Lebenslauf:\n\n{text}"
+            if not path_value:
+                raise ValueError(CV_ERROR)
+        else:
+            return f"Analyze this pasted CV:\n\n{text}"
 
     if not path_value:
         raise ValueError(CV_ERROR)
@@ -271,7 +274,7 @@ def build_cv_content(uploaded_file: Any, cv_text: str | None) -> Any:
                 "data": encoded_pdf,
             },
         },
-        {"type": "text", "text": "Analysiere diesen PDF-Lebenslauf."},
+        {"type": "text", "text": "Analyze this PDF CV."},
     ]
 
 
@@ -291,9 +294,9 @@ def profile_is_empty(profile: dict[str, Any]) -> bool:
 def render_teaser(teaser: list[str]) -> str:
     items = teaser[:3] if isinstance(teaser, list) else []
     while len(items) < 3:
-        items.append("Keine Beobachtung verfügbar.")
+        items.append("No observation available yet.")
     bullets = "\n".join(f"{idx}. {item}" for idx, item in enumerate(items, start=1))
-    return f"## Erste Beobachtungen\n\n{bullets}"
+    return f"## First Observations\n\n{bullets}"
 
 
 def escape_html(value: Any) -> str:
@@ -483,7 +486,7 @@ def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
         return [
             {
                 "name": item.get("title") or result_domain(item.get("url", "")),
-                "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
+                "why": item.get("snippet") or item.get("url") or "Live search result",
                 "url": item.get("url", ""),
                 "source": item.get("source", ""),
             }
@@ -530,7 +533,7 @@ def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
                 jobs.append(
                     {
                         "title": title,
-                        "why": " · ".join(part for part in [company, location] if part) or "Live-Job aus Arbeitnow",
+                        "why": " · ".join(part for part in [company, location] if part) or "Live job from Arbeitnow",
                         "url": url,
                         "source": "Arbeitnow",
                     }
@@ -545,8 +548,8 @@ def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
     results = search_live_web(f'site:linkedin.com/jobs OR site:indeed.com "{query}" Germany', max_results=3)
     return [
         {
-            "title": item.get("title") or "Live-Jobtreffer",
-            "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
+            "title": item.get("title") or "Live job result",
+            "why": item.get("snippet") or item.get("url") or "Live search result",
             "url": item.get("url", ""),
             "source": item.get("source", ""),
         }
@@ -555,15 +558,15 @@ def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def recent_information(profile: dict[str, Any]) -> list[dict[str, str]]:
-    query = f"AI job market Germany {profile_query(profile, max_skills=1)}"
-    results = search_live_web(query, topic="news", max_results=3)
+def course_suggestions(profile: dict[str, Any]) -> list[dict[str, str]]:
+    query = f"AI course {profile_query(profile, max_skills=2)} Coursera edX DeepLearning.AI"
+    results = search_live_web(query, max_results=3)
     if not results:
-        results = search_live_web("Künstliche Intelligenz Arbeitsmarkt Deutschland", topic="news", max_results=3)
+        results = search_live_web("AI productivity course Coursera edX DeepLearning.AI", max_results=3)
     return [
         {
-            "topic": item.get("title") or result_domain(item.get("url", "")),
-            "why_it_matters": item.get("snippet") or item.get("url") or "Aktuelles Live-Signal",
+            "name": item.get("title") or result_domain(item.get("url", "")),
+            "why": item.get("snippet") or item.get("url") or "Course search result",
             "url": item.get("url", ""),
             "source": item.get("source", ""),
         }
@@ -576,7 +579,7 @@ def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
     discovery = {
         "companies": [],
         "jobs": [],
-        "recent_information": [],
+        "courses": [],
         "live_enabled": bool(TAVILY_API_KEY or SERPAPI_API_KEY or ARBEITNOW_BASE_URL),
     }
     try:
@@ -588,21 +591,51 @@ def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["jobs"] = []
     try:
-        discovery["recent_information"] = recent_information(profile)
+        discovery["courses"] = course_suggestions(profile)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
-        discovery["recent_information"] = []
+        discovery["courses"] = []
     return discovery
 
 
 def exposure_level_for_task(task: str) -> tuple[str, str]:
     lower = task.lower()
-    high_terms = ["report", "analyse", "daten", "content", "text", "recherche", "dokument", "crm", "seo"]
-    low_terms = ["stakeholder", "führung", "strategie", "verhandlung", "beratung", "team", "kunden", "kommunikation"]
+    high_terms = [
+        "report",
+        "analysis",
+        "analyse",
+        "data",
+        "daten",
+        "content",
+        "text",
+        "research",
+        "recherche",
+        "document",
+        "dokument",
+        "crm",
+        "seo",
+    ]
+    low_terms = [
+        "stakeholder",
+        "leadership",
+        "strategy",
+        "führung",
+        "strategie",
+        "negotiation",
+        "verhandlung",
+        "consulting",
+        "beratung",
+        "team",
+        "customer",
+        "client",
+        "kunden",
+        "communication",
+        "kommunikation",
+    ]
     if any(term in lower for term in high_terms):
-        return ("hoch", "#e07a5b")
+        return ("high", "#e07a5b")
     if any(term in lower for term in low_terms):
-        return ("niedrig", "#5be08a")
-    return ("mittel", "#e0c85b")
+        return ("low", "#5be08a")
+    return ("medium", "#e0c85b")
 
 
 def discovery_rows(
@@ -620,9 +653,11 @@ def discovery_rows(
             secondary = escape_html(item.get(secondary_key))
             if primary:
                 source = escape_html(item.get("source"))
-                url = escape_html(item.get("url"))
+                raw_url = str(item.get("url") or "")
+                parsed_url = urllib.parse.urlparse(raw_url)
+                url = escape_html(raw_url) if parsed_url.scheme in {"http", "https"} else ""
                 source_label = f'<em>{source}</em>' if source else ""
-                link_label = f' <a href="{url}" target="_blank" rel="noopener noreferrer">öffnen</a>' if url else ""
+                link_label = f' <a href="{url}" target="_blank" rel="noopener noreferrer">open</a>' if url else ""
                 rows.append(
                     f'<div class="cn-discovery-item"><strong>{primary}</strong>'
                     f'<span>{secondary}</span><small>{source_label}{link_label}</small></div>'
@@ -637,10 +672,10 @@ def sidebar_html(
     discovery: dict[str, Any] | None = None,
 ) -> str:
     discovery = discovery if isinstance(discovery, dict) else {}
-    role = escape_html(profile.get("current_role") or "Profil aus Lebenslauf")
-    industry = escape_html(profile.get("industry") or "Branche wird aus dem Profil abgeleitet")
+    role = escape_html(profile.get("current_role") or "CV profile")
+    industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
     years = profile.get("years_experience")
-    years_label = f"{years:g} Jahre" if isinstance(years, (int, float)) else "Erfahrung erkannt"
+    years_label = f"{years:g} years" if isinstance(years, (int, float)) else "experience detected"
     seniority = escape_html(profile.get("seniority") or "mid")
     skills = [escape_html(skill) for skill in (profile.get("skills") or [])[:4]]
     ai_signals = profile.get("ai_tool_signals") or []
@@ -660,35 +695,35 @@ def sidebar_html(
             f'<div class="cn-row"><span>{escape_html(task)}</span><span style="color:{color}">● {label}</span></div>'
         )
     while len(task_rows) < 3:
-        task_rows.append('<div class="cn-row cn-muted"><span>Weitere Aufgabe</span><span>— nach Report</span></div>')
+        task_rows.append('<div class="cn-row cn-muted"><span>Additional task</span><span>- after report</span></div>')
 
-    skill_line = " · ".join(skills) if skills else "Skills werden im Report priorisiert"
-    ai_line = "KI-Signale erkannt" if ai_signals else "Noch keine KI-Tool-Signale im CV"
+    skill_line = " · ".join(skills) if skills else "Skills will be prioritized in the workspace"
+    ai_line = "AI tool signals detected" if ai_signals else "No AI tool signals detected in the CV"
     company_rows = discovery_rows(
-        discovery.get("companies"), "name", "why", "Wird nach der Analyse ergänzt"
+        discovery.get("companies"), "name", "why", "Added after analysis"
     )
     job_rows = discovery_rows(
-        discovery.get("jobs"), "title", "why", "Wird nach der Analyse ergänzt"
+        discovery.get("jobs"), "title", "why", "Added after analysis"
     )
-    information_rows = discovery_rows(
-        discovery.get("recent_information"),
-        "topic",
-        "why_it_matters",
-        "Wird nach der Analyse ergänzt",
+    course_rows = discovery_rows(
+        discovery.get("courses"),
+        "name",
+        "why",
+        "Course matches will appear here after the catalog is connected",
     )
     live_search_configured = bool(TAVILY_API_KEY or SERPAPI_API_KEY)
     live_note = (
-        "Live-Daten: Arbeitnow + Web/News-Suche"
+        "Live data: Arbeitnow + web search"
         if live_search_configured
-        else "Live-Daten: Arbeitnow + öffentliche Websuche"
+        else "Live data: Arbeitnow + public web search"
     )
     pressure = "MEDIUM"
     pressure_color = "#e0c85b"
     if task_candidates:
         levels = [exposure_level_for_task(str(task))[0] for task in task_candidates[:3]]
-        if levels.count("hoch") >= 2:
+        if levels.count("high") >= 2:
             pressure, pressure_color = "HIGH", "#e07a5b"
-        elif levels.count("niedrig") >= 2:
+        elif levels.count("low") >= 2:
             pressure, pressure_color = "LOW", "#5be08a"
 
     return f"""
@@ -701,43 +736,43 @@ def sidebar_html(
   </section>
   <section class="cn-side-card">
     <div class="cn-kicker">LEARN</div>
-    <h2>100-Tage-Plan</h2>
-    <p>{escape_html(ai_line)} · Zeitbudget folgt im Interview</p>
+    <h2>100-day plan</h2>
+    <p>{escape_html(ai_line)} · time budget comes next</p>
     <div class="cn-detail">
-      <div><span class="cn-ok">✓</span> Profil extrahiert</div>
-      <div><span class="cn-ok">✓</span> Veränderungsfelder markiert</div>
-      <div class="cn-muted">— Lernpfad nach deinen Antworten</div>
+      <div><span class="cn-ok">✓</span> Profile extracted</div>
+      <div><span class="cn-ok">✓</span> Change areas marked</div>
+      <div class="cn-muted">- learning path after your answers</div>
     </div>
   </section>
   <section class="cn-side-card">
     <div class="cn-kicker">POSITIONING</div>
-    <h2>Narrativ</h2>
+    <h2>Narrative</h2>
     <p>{skill_line}</p>
-    <div class="cn-detail">FOKUS <span class="cn-accent-text">CV-Bullets + LinkedIn Headline</span></div>
+    <div class="cn-detail">FOCUS <span class="cn-accent-text">CV bullets + LinkedIn headline</span></div>
   </section>
   <section class="cn-side-card">
     <div class="cn-kicker">NEXT ROLE</div>
-    <h2>Zielrichtung</h2>
-    <p>Wird aus Adaptionslevel, Zeitbudget und Budget abgeleitet</p>
-    <div class="cn-detail">TOP FIT <span class="cn-accent-text">nach Report-Erstellung</span></div>
+    <h2>Target direction</h2>
+    <p>Derived from adaptation level, time budget, and learning budget</p>
+    <div class="cn-detail">TOP FIT <span class="cn-accent-text">after workspace generation</span></div>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">COMPANIES</div>
-    <h2>Interessante Unternehmen</h2>
+    <h2>Relevant companies</h2>
     <div class="cn-discovery-list">{company_rows}</div>
     <p class="cn-data-note">{escape_html(live_note)}</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">JOBS</div>
-    <h2>Interessante Rollen</h2>
+    <h2>Relevant roles</h2>
     <div class="cn-discovery-list">{job_rows}</div>
-    <p class="cn-data-note">Live-Jobs via Arbeitnow, Fallback via Web-Suche</p>
+    <p class="cn-data-note">Live jobs via Arbeitnow, fallback via web search</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
-    <div class="cn-kicker">RECENT SIGNALS</div>
-    <h2>Aktuelle Entwicklungen</h2>
-    <div class="cn-discovery-list">{information_rows}</div>
-    <p class="cn-data-note">{escape_html(live_note)}</p>
+    <div class="cn-kicker">COURSES</div>
+    <h2>Course direction</h2>
+    <div class="cn-discovery-list">{course_rows}</div>
+    <p class="cn-data-note">Temporary search fallback until the verified course catalog is merged</p>
   </section>
 </aside>
 """
@@ -781,30 +816,30 @@ def dashboard_html(
 
 
 def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
-    role = escape_html(profile.get("current_role") or "Profil aus Lebenslauf")
-    industry = escape_html(profile.get("industry") or "Branche wird aus dem Profil abgeleitet")
+    role = escape_html(profile.get("current_role") or "CV profile")
+    industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
     years = profile.get("years_experience")
-    years_label = f"{years:g} Jahre" if isinstance(years, (int, float)) else "Erfahrung erkannt"
+    years_label = f"{years:g} years" if isinstance(years, (int, float)) else "experience detected"
     teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
     return f"""
     <section class="cn-chat-panel">
       <div class="cn-accent"></div>
       <div class="cn-heading">
-        <h1>Finde heraus, wo KI<br>deine Arbeit verändert.</h1>
+        <h1>Find where AI changes<br>your work.</h1>
         <p>{role}, {industry} · {escape_html(years_label)} · {escape_html(source_label)}</p>
       </div>
       <div class="cn-messages">
         <div class="cn-assistant">
-          Dein Lebenslauf ist geparst. Ich sehe jetzt dein Rollenprofil, erste Veränderungsfelder und die nächsten Entscheidungen, die deinen Report steuern.
+          Your CV is parsed. I can now see your role profile, the first change areas, and the choices that shape your career workspace.
           <div class="cn-chips">
-            <span>Exponierung prüfen</span>
-            <span>100-Tage-Plan bauen</span>
-            <span>Narrativ schärfen</span>
+            <span>Assess exposure</span>
+            <span>Build a 100-day plan</span>
+            <span>Sharpen your narrative</span>
           </div>
         </div>
-        <div class="cn-user">📄 {escape_html(source_label)}</div>
+        <div class="cn-user">CV: {escape_html(source_label)}</div>
         <div class="cn-assistant">
-          <strong>Erste Beobachtungen</strong>
+          <strong>First observations</strong>
           <ol>{teaser_items}</ol>
         </div>
       </div>
@@ -813,54 +848,61 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
 
 
 def rating_icon(rating: str) -> str:
-    return {"gruen": "🟢", "gelb": "🟡", "rot": "🔴"}.get(str(rating).lower(), "🟡")
+    return {
+        "green": "LOW",
+        "yellow": "MEDIUM",
+        "red": "HIGH",
+        "gruen": "LOW",
+        "gelb": "MEDIUM",
+        "rot": "HIGH",
+    }.get(str(rating).lower(), "MEDIUM")
 
 
 def render_report(data: dict[str, Any]) -> str:
-    lines = ["# Dein KI-Karriere-Report", ""]
+    lines = ["# AI Career Workspace", ""]
 
-    lines += ["## 1. Wo KI deine Arbeit verändert", ""]
+    lines += ["## 1. Where AI changes your work", ""]
     for item in data.get("exposure", []):
         lines.append(
             f"- **{item.get('task', '')}** {rating_icon(item.get('rating', 'gelb'))}: {item.get('reasoning', '')}"
         )
     lines += ["", data.get("exposure_summary", ""), ""]
 
-    lines += ["## 2. Deine 3 wichtigsten Lücken", ""]
+    lines += ["## 2. Your most important gaps", ""]
     for idx, gap in enumerate(data.get("gaps", []), start=1):
         lines.append(f"{idx}. **{gap.get('gap', '')}**: {gap.get('why_it_matters', '')}")
     lines.append("")
 
-    lines += ["## 3. Deine ersten 100 Tage", ""]
+    lines += ["## 3. Your first 100 days", ""]
     for block in data.get("plan_100", []):
         lines.append(f"**{block.get('weeks', '')}: {block.get('focus', '')}**")
         for action in block.get("actions", []):
             lines.append(f"- {action}")
-        lines.append(f"→ Ergebnis: {block.get('outcome', '')}")
+        lines.append(f"Outcome: {block.get('outcome', '')}")
         lines.append("")
 
-    lines += ["## 4. Dein 365-Tage-Fahrplan", ""]
+    lines += ["## 4. Your 365-day roadmap", ""]
     for quarter in data.get("plan_365", []):
         lines.append(f"**{quarter.get('quarter', '')}: {quarter.get('theme', '')}**")
         for milestone in quarter.get("milestones", []):
             lines.append(f"- {milestone}")
         lines.append("")
-    lines += ["### Entscheidungspunkte", ""]
+    lines += ["### Decision gates", ""]
     for gate in data.get("decision_gates", []):
         lines.append(f"- **{gate.get('when', '')}:** {gate.get('question', '')}")
-        lines.append(f"  - Wenn ja: {gate.get('if_yes', '')}")
-        lines.append(f"  - Wenn nein: {gate.get('if_no', '')}")
+        lines.append(f"  - If yes: {gate.get('if_yes', '')}")
+        lines.append(f"  - If no: {gate.get('if_no', '')}")
     lines.append("")
 
-    lines += ["## 5. Lernressourcen", ""]
+    lines += ["## 5. Courses and learning resources", ""]
     for resource in data.get("resources", []):
         lines.append(f"**{resource.get('gap', '')}**")
-        lines.append("**Kostenlos:**")
+        lines.append("**Free:**")
         for item in resource.get("free", []):
             lines.append(f"- {item.get('name', '')} ({item.get('format', '')}, {item.get('time_cost', '')})")
         paid = resource.get("paid", [])
         if paid:
-            lines.append("**Kostenpflichtig:**")
+            lines.append("**Paid:**")
             for item in paid:
                 lines.append(
                     f"- {item.get('name', '')} ({item.get('format', '')}, {item.get('cost_estimate', '')}, {item.get('time_cost', '')})"
@@ -868,7 +910,7 @@ def render_report(data: dict[str, Any]) -> str:
         lines.append("")
 
     repositioning = data.get("repositioning", {})
-    lines += ["## 6. Dein neues Narrativ", ""]
+    lines += ["## 6. Your new narrative", ""]
     for bullet in repositioning.get("cv_bullets", []):
         lines.append(f"- {bullet}")
     lines.append("")
@@ -877,7 +919,7 @@ def render_report(data: dict[str, Any]) -> str:
     lines.append(f"*{data.get('closing_note', '')}*")
     lines.append("")
     lines.append(
-        "*Hinweis: KI-Exponierungs-Einschätzungen sind fundierte Prognosen, keine Gewissheiten. Dieser Report wurde KI-gestützt erstellt.*"
+        "*Note: AI exposure assessments are informed estimates, not certainties. This workspace was created with AI support.*"
     )
     return "\n".join(lines)
 
@@ -944,8 +986,8 @@ def report_shell_html(profile: dict[str, Any], report: str, discovery: dict[str,
     left_html = f"""
     <section class="cn-chat-panel cn-report-panel">
       <div class="cn-heading">
-        <h1>Dein Report</h1>
-        <p>Links der Output, rechts bleiben Unternehmen, Jobs und Marktsignale sichtbar.</p>
+        <h1>Your workspace</h1>
+        <p>The career report stays in the app, with courses and optional role context beside it.</p>
       </div>
       <article class="cn-report-content">
         {markdown_to_basic_html(report)}
@@ -963,7 +1005,6 @@ def write_report_file(markdown: str) -> str:
 
 
 def start_analysis(uploaded_file: Any, cv_text: str | None):
-    print("DEBUG start_analysis called", flush=True)
     try:
         content = build_cv_content(uploaded_file, cv_text)
         result = call_json(PROMPT_1, content, 2000)
@@ -971,16 +1012,15 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
         if profile_is_empty(profile):
             raise ValueError(CV_ERROR)
         teaser = result.get("teaser", [])
-        discovery = live_discovery(profile)
         return (
             gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=False),
-            dashboard_left_html(profile, teaser, "Profil aus deinem CV"),
-            sidebar_html(profile, discovery),
+            dashboard_left_html(profile, teaser, "Profile from your CV"),
+            sidebar_html(profile, {}),
             profile,
-            discovery,
+            {},
             "",
         )
     except ValueError as exc:
@@ -1010,8 +1050,15 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
         )
 
 
+def refresh_discovery(profile: dict[str, Any]):
+    if not profile:
+        return "", {}
+    discovery = live_discovery(profile)
+    return sidebar_html(profile, discovery), discovery
+
+
 def enforce_budget_rules(report_data: dict[str, Any], learning_budget: str) -> dict[str, Any]:
-    if learning_budget.startswith("0 €"):
+    if learning_budget.startswith("0 EUR"):
         for resource in report_data.get("resources", []):
             if isinstance(resource, dict):
                 resource["paid"] = []
@@ -1026,21 +1073,20 @@ def create_report(
     learning_budget: str,
     trigger: str,
 ):
-    print("DEBUG create_report called", flush=True)
     try:
         if not profile:
             raise ValueError(CV_ERROR)
         if not adaptation or not time_budget or not learning_budget:
-            raise ValueError("Bitte beantworte die drei Pflichtfragen.")
+            raise ValueError("Please answer the three required questions.")
 
         interview = {
-            "adaptionslevel": adaptation,
-            "zeitbudget": time_budget,
-            "lernbudget": learning_budget,
-            "ausloeser": (trigger or "").strip(),
+            "adaptation_level": adaptation,
+            "time_budget": time_budget,
+            "learning_budget": learning_budget,
+            "trigger": (trigger or "").strip(),
         }
         user_payload = json.dumps({"profile": profile, "interview": interview}, ensure_ascii=False, indent=2)
-        result = call_json(PROMPT_2, f"Erstelle den Report aus diesen Daten:\n\n{user_payload}", 8000)
+        result = call_json(PROMPT_2, f"Create the career workspace from this data:\n\n{user_payload}", 8000)
         result = enforce_budget_rules(result, learning_budget)
         report = render_report(result)
         download_path = write_report_file(report)
@@ -1060,7 +1106,6 @@ def create_report(
 
 
 def reset_app():
-    print("DEBUG reset_app called", flush=True)
     return (
         gr.update(visible=True),
         gr.update(visible=False),
@@ -1078,6 +1123,7 @@ def reset_app():
         "",
         "",
         None,
+        "",
         "",
     )
 
@@ -1110,9 +1156,7 @@ footer,
 .gradio-container > div:last-child img,
 .gradio-container > div:last-child svg,
 .gradio-container [style*="position: fixed"],
-.gradio-container [class*="floating"],
-.gradio-container [class*="assistant"],
-.gradio-container [class*="bot"] {
+.gradio-container [class*="floating"] {
   display: none !important;
 }
 .container {
@@ -1120,7 +1164,7 @@ footer,
   margin: 0 auto;
 }
 .upload-shell {
-  min-height: auto;
+  min-height: min(620px, calc(100vh - 24px));
   display: grid;
   align-content: center;
   gap: 22px;
@@ -1129,7 +1173,7 @@ footer,
 }
 .upload-panel {
   border: 1px solid var(--cn-line);
-  border-radius: 20px;
+  border-radius: 16px;
   padding: 28px;
   max-height: calc(100vh - 48px);
   overflow: auto;
@@ -1144,13 +1188,27 @@ footer,
   color: var(--cn-muted);
   font-size: 13.5px;
 }
-.upload-panel textarea {
-  min-height: 130px !important;
-  height: 140px !important;
-  max-height: 220px !important;
-}
 .upload-panel button {
   min-height: 42px !important;
+}
+.composer-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+}
+.composer-input textarea {
+  min-height: 48px !important;
+  height: 48px !important;
+  max-height: 120px !important;
+  border-radius: 8px !important;
+  line-height: 1.45 !important;
+}
+.composer-upload button,
+.composer-row button {
+  min-width: 132px !important;
+  height: 48px !important;
+  border-radius: 8px !important;
 }
 .cn-shell {
   min-height: min(680px, calc(100vh - 48px));
@@ -1513,18 +1571,25 @@ button.primary {
 }
 """
 
-with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
+with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
     profile_state = gr.State({})
     discovery_state = gr.State({})
 
     with gr.Column(visible=True, elem_classes=["container", "upload-shell"]) as screen_upload:
         with gr.Column(elem_classes="upload-panel"):
-            gr.Markdown("# KI-Karriere-Check")
-            gr.Markdown("Lade deinen Lebenslauf hoch und sieh, wo KI deine Arbeit verändert, welche Lücken wirklich zählen und wie du dich positionierst.")
-            cv_file = gr.UploadButton("PDF-Lebenslauf auswählen", file_types=[".pdf"], file_count="single")
-            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=5, max_lines=8, placeholder="Mindestens 300 Zeichen ...")
-            start_button = gr.Button("Analyse starten", variant="primary")
-            gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
+            gr.Markdown("# AI Career Navigator")
+            gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career workspace with AI exposure, courses, and next steps.")
+            with gr.Row(elem_classes="composer-row"):
+                cv_text = gr.Textbox(
+                    label="",
+                    lines=1,
+                    max_lines=4,
+                    placeholder="Paste your CV text here, or upload a PDF next to this line...",
+                    elem_classes="composer-input",
+                )
+                cv_file = gr.UploadButton("Upload CV", file_types=[".pdf"], file_count="single", elem_classes="composer-upload")
+            start_button = gr.Button("Start analysis", variant="primary")
+            gr.Markdown("Your CV is not stored. The analysis runs once through your configured AI provider.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
 
     with gr.Column(visible=False, elem_classes="container") as screen_workspace:
@@ -1532,24 +1597,24 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
             with gr.Column():
                 teaser_markdown = gr.HTML()
                 with gr.Column(visible=True, elem_classes="interview-panel") as interaction_panel:
-                    gr.Markdown("## Kurzinterview")
-                    gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird. Die Report-Erstellung kann mit großen Modellen 60–120 Sekunden dauern.")
+                    gr.Markdown("## Short interview")
+                    gr.Markdown("Four answers are enough to keep the workspace specific. Large models may take 60-120 seconds.")
                     with gr.Row():
-                        adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
-                        time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
+                        adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptation level", interactive=True)
+                        time_budget = gr.Radio(TIME_OPTIONS, label="Time budget", interactive=True)
                     with gr.Row():
-                        learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
-                        trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=4)
-                    report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
-                    gr.Markdown("Während der Erstellung bleibt diese Ansicht sichtbar. Warte bitte, bis der Report automatisch erscheint.", elem_classes="privacy")
+                        learning_budget = gr.Radio(BUDGET_OPTIONS, label="Learning budget", interactive=True)
+                        trigger = gr.Textbox(label="Trigger", placeholder="What brought you here today?", lines=4)
+                    report_button = gr.Button("Generate workspace", variant="primary")
+                    gr.Markdown("This view stays visible while the workspace is generated.", elem_classes="privacy")
                     interview_error = gr.Markdown()
                 with gr.Column(visible=False, elem_classes="report-shell") as report_panel:
                     report_markdown = gr.HTML()
-                    download_button = gr.DownloadButton("Report als Markdown herunterladen")
-                    reset_button = gr.Button("Neue Analyse")
+                    download_button = gr.DownloadButton("Download workspace notes")
+                    reset_button = gr.Button("New analysis")
             live_sidebar = gr.HTML()
 
-    start_button.click(
+    start_event = start_button.click(
         fn=start_analysis,
         inputs=[cv_file, cv_text],
         outputs=[
@@ -1566,6 +1631,13 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
         api_name=False,
         show_progress="full",
         scroll_to_output=True,
+    )
+    start_event.then(
+        fn=refresh_discovery,
+        inputs=[profile_state],
+        outputs=[live_sidebar, discovery_state],
+        api_name=False,
+        show_progress="hidden",
     )
     report_button.click(
         fn=create_report,
@@ -1596,6 +1668,7 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
             report_markdown,
             download_button,
             upload_error,
+            interview_error,
         ],
         api_name=False,
         scroll_to_output=True,
