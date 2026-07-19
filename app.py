@@ -810,7 +810,7 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
       </div>
       <div class="cn-messages">
         <div class="cn-assistant">
-          Your CV is parsed. Before searching jobs or companies, I need your direction. The useful output is not a report; it is a set of testable perspectives.
+          Your CV is parsed. Before searching jobs or companies, I need your direction. The useful output is not a generic report; it is a set of testable career perspectives.
           <div class="cn-chips">
             <span>Clarify direction</span>
             <span>Test perspectives</span>
@@ -1472,24 +1472,27 @@ def reset_app():
 
 CSS = """
 :root {
-  --cn-bg: #070d0a;
-  --cn-bg-2: #0c1710;
-  --cn-primary: #f4fff6;
-  --cn-text: #d6ede0;
-  --cn-soft: #9fc2ac;
-  --cn-muted: #7fa88f;
-  --cn-accent: #5be08a;
-  --cn-warn: #e0c85b;
-  --cn-alert: #e07a5b;
-  --cn-line: rgba(255,255,255,.09);
+  --cn-bg: #111a15;
+  --cn-bg-2: #18261e;
+  --cn-panel: rgba(255,255,255,.045);
+  --cn-panel-strong: rgba(255,255,255,.075);
+  --cn-primary: #fbfff9;
+  --cn-text: #e4f1e8;
+  --cn-soft: #c0d7c8;
+  --cn-muted: #a3b9ab;
+  --cn-accent: #68d391;
+  --cn-accent-strong: #8ee6ad;
+  --cn-warn: #d8b75b;
+  --cn-alert: #df8068;
+  --cn-line: rgba(255,255,255,.16);
 }
 html,
 body,
 gradio-app,
 .gradio-container {
   background-color: var(--cn-bg) !important;
-  color: #eafbee !important;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  color: var(--cn-text) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
   min-height: 100vh !important;
   overflow-x: hidden !important;
   max-width: none !important;
@@ -1505,9 +1508,9 @@ gradio-app,
   z-index: -1 !important;
   pointer-events: none !important;
   background:
-    radial-gradient(circle at 18% 0%, rgba(91,224,138,.18), transparent 34rem),
-    radial-gradient(circle at 90% 14%, rgba(224,200,91,.1), transparent 30rem),
-    linear-gradient(135deg, var(--cn-bg), var(--cn-bg-2) 58%, #050806) !important;
+    radial-gradient(circle at 16% 0%, rgba(104,211,145,.2), transparent 34rem),
+    radial-gradient(circle at 92% 10%, rgba(216,183,91,.12), transparent 30rem),
+    linear-gradient(135deg, #101a14, var(--cn-bg-2) 56%, #0d1511) !important;
 }
 .gradio-container > * {
   position: relative !important;
@@ -1521,10 +1524,10 @@ gradio-app,
 .gradio-container section,
 .gradio-container .block,
 .gradio-container .form {
-  outline-color: rgba(91,224,138,.75) !important;
+  outline-color: rgba(104,211,145,.75) !important;
 }
 .gradio-container *:focus-visible {
-  outline: 2px solid rgba(91,224,138,.75) !important;
+  outline: 2px solid rgba(104,211,145,.75) !important;
   outline-offset: 2px !important;
 }
 body {
@@ -1632,7 +1635,7 @@ footer,
   border-radius: 8px;
   padding: 8px 10px;
   color: var(--cn-text);
-  background: rgba(255,255,255,.03);
+  background: var(--cn-panel);
   font-size: 12px;
 }
 .cn-settings summary {
@@ -1651,7 +1654,7 @@ footer,
   border: 1px solid var(--cn-line);
   border-radius: 8px;
   padding: 12px;
-  background: #07130c;
+  background: #17231c;
   box-shadow: 0 16px 40px rgba(0,0,0,.35);
 }
 .cn-settings-panel div {
@@ -1688,8 +1691,8 @@ footer,
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(91,224,138,.16);
-  color: var(--cn-accent);
+  background: rgba(104,211,145,.18);
+  color: var(--cn-accent-strong);
   font-size: 11px;
 }
 .upload-shell {
@@ -1705,6 +1708,8 @@ footer,
   padding: 28px;
   max-height: none;
   overflow: visible;
+  background: var(--cn-panel);
+  box-shadow: 0 18px 46px rgba(0,0,0,.18);
 }
 .upload-panel h1 {
   color: var(--cn-primary);
@@ -1779,7 +1784,7 @@ footer,
   display: flex;
   flex-direction: column;
   gap: 22px;
-  color: #eafbee;
+  color: var(--cn-text);
 }
 .cn-topbar {
   display: flex;
@@ -1788,8 +1793,9 @@ footer,
   gap: 16px;
 }
 .cn-status {
-  font: 500 11.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
-  letter-spacing: .05em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--cn-muted);
   display: flex;
   gap: 22px;
@@ -1821,7 +1827,7 @@ footer,
 }
 .cn-chat-panel, .cn-side-card, .interview-panel, .report-shell {
   border: 1px solid var(--cn-line);
-  background: transparent;
+  background: var(--cn-panel);
 }
 .cn-chat-panel {
   border-radius: 20px;
@@ -1836,7 +1842,7 @@ footer,
 .cn-accent {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(135deg, transparent 46%, rgba(91,224,138,.05) 47%, transparent 48%);
+  background-image: linear-gradient(135deg, transparent 46%, rgba(104,211,145,.045) 47%, transparent 48%);
   pointer-events: none;
 }
 .cn-heading, .cn-messages {
@@ -1875,11 +1881,11 @@ footer,
 .cn-user {
   align-self: flex-end;
   max-width: min(70%, 520px);
-  background: rgba(255,255,255,.05);
+  background: var(--cn-panel-strong);
   border-radius: 14px;
   padding: 10px 15px;
   font-size: 13.5px;
-  color: #eafbee;
+  color: var(--cn-text);
 }
 .cn-chips {
   display: flex;
@@ -1888,11 +1894,12 @@ footer,
   margin-top: 10px;
 }
 .cn-chips span {
-  border: 1px solid rgba(255,255,255,.14);
+  border: 1px solid var(--cn-line);
   border-radius: 999px;
   padding: 6px 13px;
   font-size: 12px;
-  color: #bcd9c7;
+  color: var(--cn-soft);
+  background: rgba(255,255,255,.035);
 }
 .cn-sidebar {
   display: flex;
@@ -1915,8 +1922,9 @@ footer,
   flex: 1.1;
 }
 .cn-kicker {
-  font: 500 10.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
-  letter-spacing: .08em;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
   color: var(--cn-muted);
   text-transform: uppercase;
 }
@@ -1932,7 +1940,8 @@ footer,
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font: 500 12px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--cn-text);
 }
 .cn-discovery-card {
@@ -1966,7 +1975,8 @@ footer,
 }
 .cn-discovery-item small {
   color: var(--cn-soft);
-  font: 500 10px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 600;
 }
 .cn-discovery-item a {
   color: var(--cn-accent);
@@ -1977,7 +1987,8 @@ footer,
 }
 .cn-side-card .cn-data-note {
   margin: 2px 0 0;
-  font: 500 9.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--cn-muted);
 }
 .cn-row {
@@ -2018,7 +2029,7 @@ footer,
   flex-wrap: wrap;
   gap: 8px;
   padding: 0 0 12px;
-  background: rgba(7,13,10,.9);
+  background: rgba(17,26,21,.92);
   backdrop-filter: blur(10px);
 }
 .cn-workspace-tabs a {
@@ -2030,7 +2041,7 @@ footer,
   font-size: 12px;
 }
 .cn-workspace-tabs a:hover {
-  border-color: rgba(91,224,138,.45);
+  border-color: rgba(104,211,145,.5);
 }
 .cn-window-board {
   display: grid;
@@ -2049,8 +2060,8 @@ footer,
   border: 1px solid var(--cn-line);
   border-radius: 8px;
   padding: 14px;
-  background: rgba(5,8,6,.46);
-  box-shadow: 0 16px 34px rgba(0,0,0,.18);
+  background: var(--cn-panel);
+  box-shadow: 0 16px 34px rgba(0,0,0,.14);
 }
 .cn-window-wide {
   grid-column: 1 / -1;
@@ -2068,8 +2079,9 @@ footer,
 .cn-card-topline span,
 .cn-work-card summary span {
   color: var(--cn-muted);
-  font: 600 10px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
-  letter-spacing: .08em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 .cn-window-bar h2 {
@@ -2091,7 +2103,7 @@ footer,
   border: 1px solid var(--cn-line);
   border-radius: 8px;
   padding: 16px;
-  background: rgba(255,255,255,.02);
+  background: rgba(255,255,255,.04);
 }
 .cn-work-card h3,
 .cn-work-card h4 {
@@ -2119,23 +2131,24 @@ footer,
   font-size: 15px;
 }
 .cn-question-list {
-  border-left: 2px solid rgba(91,224,138,.42);
+  border-left: 2px solid rgba(104,211,145,.48);
   padding-left: 14px;
 }
 .cn-perspective-card small {
   display: block;
   color: var(--cn-muted);
-  font: 500 11px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
   margin-top: 8px;
 }
 .cn-exposure-card[data-rating="high"] {
-  border-color: rgba(224,122,91,.42);
+  border-color: rgba(223,128,104,.48);
 }
 .cn-exposure-card[data-rating="medium"] {
-  border-color: rgba(224,200,91,.42);
+  border-color: rgba(216,183,91,.48);
 }
 .cn-exposure-card[data-rating="low"] {
-  border-color: rgba(91,224,138,.35);
+  border-color: rgba(104,211,145,.44);
 }
 .cn-course-grid {
   display: grid;
@@ -2223,14 +2236,14 @@ label, .wrap label {
   color: var(--cn-soft) !important;
 }
 textarea, input {
-  color: #eafbee !important;
+  color: var(--cn-text) !important;
 }
 textarea {
   resize: vertical !important;
 }
 button.primary {
   background: var(--cn-accent) !important;
-  color: #07130c !important;
+  color: #102016 !important;
 }
 .prose, .prose * {
   color: var(--cn-text);
@@ -2321,7 +2334,7 @@ with gr.Blocks(title=APP_NAME) as demo:
         gr.HTML(app_header_html())
         with gr.Column(elem_classes="upload-panel"):
             gr.Markdown(f"# {APP_NAME}")
-            gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career workspace with AI exposure, courses, and next steps.")
+            gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career strategy workspace: directions, evidence, tradeoffs, and next moves.")
             with gr.Row(elem_classes="composer-row"):
                 cv_text = gr.Textbox(
                     label="",
@@ -2348,7 +2361,7 @@ with gr.Blocks(title=APP_NAME) as demo:
                 teaser_markdown = gr.HTML()
                 with gr.Column(visible=True, elem_classes="interview-panel") as interaction_panel:
                     gr.Markdown("## Short interview")
-                    gr.Markdown("Four answers are enough to keep the workspace specific. Large models may take 60-120 seconds.")
+                    gr.Markdown("Four answers are enough to keep the workspace specific. The next step proposes directions before it searches roles and companies.")
                     with gr.Row():
                         adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptation level", interactive=True)
                         time_budget = gr.Radio(TIME_OPTIONS, label="Time budget", interactive=True)
