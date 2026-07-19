@@ -4,9 +4,11 @@ import os
 import re
 import tempfile
 import traceback
+import html as html_lib
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -384,46 +386,138 @@ def search_live_web(query: str, *, topic: str = "general", max_results: int = 3)
             for item in (source_items or [])[:max_results]
             if isinstance(item, dict)
         ]
+    if topic == "news":
+        return search_google_news(query, max_results=max_results)
     return []
+
+
+def clean_search_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query)
+    if "uddg" in query and query["uddg"]:
+        return query["uddg"][0]
+    if parsed.scheme:
+        return url
+    if url.startswith("//"):
+        return f"https:{url}"
+    return url
+
+
+def strip_tags(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()
+
+
+def search_duckduckgo(query: str, *, max_results: int = 3) -> list[dict[str, str]]:
+    params = {"q": query, "kl": "de-de"}
+    url = f"https://duckduckgo.com/html/?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "text/html",
+            "User-Agent": "Mozilla/5.0 (compatible; ai-career-navigator/0.1)",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=LIVE_DATA_TIMEOUT) as response:
+        page = response.read().decode("utf-8", errors="replace")
+
+    results = []
+    blocks = re.findall(r'<div class="result(?: results_links)?[^"]*".*?</div>\s*</div>', page, flags=re.DOTALL)
+    for block in blocks:
+        link_match = re.search(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, flags=re.DOTALL)
+        if not link_match:
+            continue
+        snippet_match = re.search(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', block, flags=re.DOTALL)
+        title = html_lib.unescape(strip_tags(link_match.group(2)))
+        result_url = clean_search_url(html_lib.unescape(link_match.group(1)))
+        snippet = html_lib.unescape(strip_tags(snippet_match.group(1))) if snippet_match else result_domain(result_url)
+        if title and result_url:
+            results.append({"title": title, "url": result_url, "snippet": snippet, "source": "DuckDuckGo"})
+        if len(results) == max_results:
+            break
+    return results
+
+
+def search_google_news(query: str, *, max_results: int = 3) -> list[dict[str, str]]:
+    params = {"q": query, "hl": "de", "gl": "DE", "ceid": "DE:de"}
+    url = f"https://news.google.com/rss/search?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"User-Agent": "ai-career-navigator/0.1"})
+    with urllib.request.urlopen(request, timeout=LIVE_DATA_TIMEOUT) as response:
+        xml_text = response.read().decode("utf-8", errors="replace")
+    root = ET.fromstring(xml_text)
+    results = []
+    for item in root.findall("./channel/item")[:max_results]:
+        title = item.findtext("title") or ""
+        link = item.findtext("link") or ""
+        source = item.findtext("source") or "Google News"
+        if title and link:
+            results.append({"title": title, "url": link, "snippet": source, "source": "Google News"})
+    return results
+
+
+def ranked_arbeitnow_jobs(profile: dict[str, Any], *, limit: int = 50) -> list[tuple[int, dict[str, Any]]]:
+    query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
+    data = request_json(ARBEITNOW_BASE_URL)
+    keywords = keyword_set(query)
+    ranked_items = []
+    for item in data.get("data", [])[:limit]:
+        if not isinstance(item, dict):
+            continue
+        haystack = " ".join(
+            [
+                str(item.get("title") or ""),
+                str(item.get("company_name") or ""),
+                str(item.get("location") or ""),
+                " ".join(str(tag) for tag in item.get("tags", []) if tag),
+            ]
+        )
+        score = len(keywords & keyword_set(haystack))
+        ranked_items.append((score, item))
+    ranked_items.sort(key=lambda pair: pair[0], reverse=True)
+    return ranked_items
 
 
 def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
     query = f'hiring companies Germany "{profile_query(profile)}"'
     results = search_live_web(query, max_results=3)
-    return [
-        {
-            "name": item.get("title") or result_domain(item.get("url", "")),
-            "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
-            "url": item.get("url", ""),
-            "source": item.get("source", ""),
-        }
-        for item in results
-        if item.get("title") or item.get("url")
-    ]
+    if results:
+        return [
+            {
+                "name": item.get("title") or result_domain(item.get("url", "")),
+                "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
+                "url": item.get("url", ""),
+                "source": item.get("source", ""),
+            }
+            for item in results
+            if item.get("title") or item.get("url")
+        ]
+
+    companies = []
+    seen = set()
+    for score, item in ranked_arbeitnow_jobs(profile):
+        if score == 0:
+            break
+        company = item.get("company_name", "")
+        if not company or company in seen:
+            continue
+        seen.add(company)
+        companies.append(
+            {
+                "name": company,
+                "why": item.get("title", "Passende Live-Stelle gefunden"),
+                "url": item.get("url", ""),
+                "source": "Arbeitnow",
+            }
+        )
+        if len(companies) == 3:
+            break
+    return companies
 
 
 def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
     query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
     jobs: list[dict[str, str]] = []
     try:
-        data = request_json(ARBEITNOW_BASE_URL)
-        keywords = keyword_set(query)
-        ranked_items = []
-        for item in data.get("data", [])[:50]:
-            if not isinstance(item, dict):
-                continue
-            haystack = " ".join(
-                [
-                    str(item.get("title") or ""),
-                    str(item.get("company_name") or ""),
-                    str(item.get("location") or ""),
-                    " ".join(str(tag) for tag in item.get("tags", []) if tag),
-                ]
-            )
-            score = len(keywords & keyword_set(haystack))
-            ranked_items.append((score, item))
-        ranked_items.sort(key=lambda pair: pair[0], reverse=True)
-        for score, item in ranked_items:
+        for score, item in ranked_arbeitnow_jobs(profile):
             if score == 0:
                 break
             if not isinstance(item, dict):
@@ -462,8 +556,10 @@ def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def recent_information(profile: dict[str, Any]) -> list[dict[str, str]]:
-    query = f'latest AI job market news Germany "{profile_query(profile, max_skills=2)}"'
+    query = f"AI job market Germany {profile_query(profile, max_skills=1)}"
     results = search_live_web(query, topic="news", max_results=3)
+    if not results:
+        results = search_live_web("Künstliche Intelligenz Arbeitsmarkt Deutschland", topic="news", max_results=3)
     return [
         {
             "topic": item.get("title") or result_domain(item.get("url", "")),
@@ -487,7 +583,10 @@ def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
         discovery["companies"] = interesting_companies(profile)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["companies"] = []
-    discovery["jobs"] = interesting_jobs(profile)
+    try:
+        discovery["jobs"] = interesting_jobs(profile)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["jobs"] = []
     try:
         discovery["recent_information"] = recent_information(profile)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
@@ -533,10 +632,8 @@ def discovery_rows(
     return "".join(rows)
 
 
-def dashboard_html(
+def sidebar_html(
     profile: dict[str, Any],
-    teaser: list[str],
-    source_label: str,
     discovery: dict[str, Any] | None = None,
 ) -> str:
     discovery = discovery if isinstance(discovery, dict) else {}
@@ -565,7 +662,6 @@ def dashboard_html(
     while len(task_rows) < 3:
         task_rows.append('<div class="cn-row cn-muted"><span>Weitere Aufgabe</span><span>— nach Report</span></div>')
 
-    teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
     skill_line = " · ".join(skills) if skills else "Skills werden im Report priorisiert"
     ai_line = "KI-Signale erkannt" if ai_signals else "Noch keine KI-Tool-Signale im CV"
     company_rows = discovery_rows(
@@ -584,7 +680,7 @@ def dashboard_html(
     live_note = (
         "Live-Daten: Arbeitnow + Web/News-Suche"
         if live_search_configured
-        else "Live-Jobs aktiv · Web/News API fehlt: TAVILY_API_KEY oder SERPAPI_API_KEY setzen"
+        else "Live-Daten: Arbeitnow + öffentliche Websuche"
     )
     pressure = "MEDIUM"
     pressure_color = "#e0c85b"
@@ -596,15 +692,101 @@ def dashboard_html(
             pressure, pressure_color = "LOW", "#5be08a"
 
     return f"""
+<aside class="cn-sidebar" data-pressure="{pressure}" data-pressure-color="{pressure_color}">
+  <section class="cn-side-card cn-profile">
+    <div class="cn-kicker">PROFILE</div>
+    <h2>{role}</h2>
+    <p>{industry} · {seniority} · {escape_html(years_label)}</p>
+    <div class="cn-detail">{''.join(task_rows)}</div>
+  </section>
+  <section class="cn-side-card">
+    <div class="cn-kicker">LEARN</div>
+    <h2>100-Tage-Plan</h2>
+    <p>{escape_html(ai_line)} · Zeitbudget folgt im Interview</p>
+    <div class="cn-detail">
+      <div><span class="cn-ok">✓</span> Profil extrahiert</div>
+      <div><span class="cn-ok">✓</span> Veränderungsfelder markiert</div>
+      <div class="cn-muted">— Lernpfad nach deinen Antworten</div>
+    </div>
+  </section>
+  <section class="cn-side-card">
+    <div class="cn-kicker">POSITIONING</div>
+    <h2>Narrativ</h2>
+    <p>{skill_line}</p>
+    <div class="cn-detail">FOKUS <span class="cn-accent-text">CV-Bullets + LinkedIn Headline</span></div>
+  </section>
+  <section class="cn-side-card">
+    <div class="cn-kicker">NEXT ROLE</div>
+    <h2>Zielrichtung</h2>
+    <p>Wird aus Adaptionslevel, Zeitbudget und Budget abgeleitet</p>
+    <div class="cn-detail">TOP FIT <span class="cn-accent-text">nach Report-Erstellung</span></div>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">COMPANIES</div>
+    <h2>Interessante Unternehmen</h2>
+    <div class="cn-discovery-list">{company_rows}</div>
+    <p class="cn-data-note">{escape_html(live_note)}</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">JOBS</div>
+    <h2>Interessante Rollen</h2>
+    <div class="cn-discovery-list">{job_rows}</div>
+    <p class="cn-data-note">Live-Jobs via Arbeitnow, Fallback via Web-Suche</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">RECENT SIGNALS</div>
+    <h2>Aktuelle Entwicklungen</h2>
+    <div class="cn-discovery-list">{information_rows}</div>
+    <p class="cn-data-note">{escape_html(live_note)}</p>
+  </section>
+</aside>
+"""
+
+
+def app_shell_html(
+    profile: dict[str, Any],
+    left_html: str,
+    discovery: dict[str, Any] | None = None,
+    status: str = "▲ ADAPTING",
+) -> str:
+    sidebar = sidebar_html(profile, discovery)
+    pressure = re.search(r'data-pressure="([^"]+)"', sidebar)
+    pressure_color = re.search(r'data-pressure-color="([^"]+)"', sidebar)
+    pressure_label = pressure.group(1) if pressure else "MEDIUM"
+    pressure_color_value = pressure_color.group(1) if pressure_color else "#e0c85b"
+    return f"""
 <div class="cn-shell">
   <div class="cn-topbar">
     <div class="cn-brand"><div class="cn-logo">A</div><div>AI Career Navigator</div></div>
     <div class="cn-status">
-      <span>STATUS <strong>▲ ADAPTING</strong></span>
-      <span>CHANGE PRESSURE <strong style="color:{pressure_color}">{pressure}</strong></span>
+      <span>STATUS <strong>{escape_html(status)}</strong></span>
+      <span>CHANGE PRESSURE <strong style="color:{pressure_color_value}">{escape_html(pressure_label)}</strong></span>
     </div>
   </div>
   <div class="cn-grid">
+    {left_html}
+    {sidebar}
+  </div>
+</div>
+"""
+
+
+def dashboard_html(
+    profile: dict[str, Any],
+    teaser: list[str],
+    source_label: str,
+    discovery: dict[str, Any] | None = None,
+) -> str:
+    return app_shell_html(profile, dashboard_left_html(profile, teaser, source_label), discovery)
+
+
+def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
+    role = escape_html(profile.get("current_role") or "Profil aus Lebenslauf")
+    industry = escape_html(profile.get("industry") or "Branche wird aus dem Profil abgeleitet")
+    years = profile.get("years_experience")
+    years_label = f"{years:g} Jahre" if isinstance(years, (int, float)) else "Erfahrung erkannt"
+    teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
+    return f"""
     <section class="cn-chat-panel">
       <div class="cn-accent"></div>
       <div class="cn-heading">
@@ -627,56 +809,6 @@ def dashboard_html(
         </div>
       </div>
     </section>
-    <aside class="cn-sidebar">
-      <section class="cn-side-card cn-profile">
-        <div class="cn-kicker">PROFILE</div>
-        <h2>{role}</h2>
-        <p>{industry} · {seniority} · {escape_html(years_label)}</p>
-        <div class="cn-detail">{''.join(task_rows)}</div>
-      </section>
-      <section class="cn-side-card">
-        <div class="cn-kicker">LEARN</div>
-        <h2>100-Tage-Plan</h2>
-        <p>{escape_html(ai_line)} · Zeitbudget folgt im Interview</p>
-        <div class="cn-detail">
-          <div><span class="cn-ok">✓</span> Profil extrahiert</div>
-          <div><span class="cn-ok">✓</span> Veränderungsfelder markiert</div>
-          <div class="cn-muted">— Lernpfad nach deinen Antworten</div>
-        </div>
-      </section>
-      <section class="cn-side-card">
-        <div class="cn-kicker">POSITIONING</div>
-        <h2>Narrativ</h2>
-        <p>{skill_line}</p>
-        <div class="cn-detail">FOKUS <span class="cn-accent-text">CV-Bullets + LinkedIn Headline</span></div>
-      </section>
-      <section class="cn-side-card">
-        <div class="cn-kicker">NEXT ROLE</div>
-        <h2>Zielrichtung</h2>
-        <p>Wird aus Adaptionslevel, Zeitbudget und Budget abgeleitet</p>
-        <div class="cn-detail">TOP FIT <span class="cn-accent-text">nach Report-Erstellung</span></div>
-      </section>
-      <section class="cn-side-card cn-discovery-card">
-        <div class="cn-kicker">COMPANIES</div>
-        <h2>Interessante Unternehmen</h2>
-        <div class="cn-discovery-list">{company_rows}</div>
-        <p class="cn-data-note">{escape_html(live_note)}</p>
-      </section>
-      <section class="cn-side-card cn-discovery-card">
-        <div class="cn-kicker">JOBS</div>
-        <h2>Interessante Rollen</h2>
-        <div class="cn-discovery-list">{job_rows}</div>
-        <p class="cn-data-note">Live-Jobs via Arbeitnow, Fallback via Web-Suche</p>
-      </section>
-      <section class="cn-side-card cn-discovery-card">
-        <div class="cn-kicker">RECENT SIGNALS</div>
-        <h2>Aktuelle Entwicklungen</h2>
-        <div class="cn-discovery-list">{information_rows}</div>
-        <p class="cn-data-note">{escape_html(live_note)}</p>
-      </section>
-    </aside>
-  </div>
-</div>
 """
 
 
@@ -687,10 +819,10 @@ def rating_icon(rating: str) -> str:
 def render_report(data: dict[str, Any]) -> str:
     lines = ["# Dein KI-Karriere-Report", ""]
 
-    lines += ["## 1. Wo KI deine Arbeit verändert", "", "| Aufgabe | Einschätzung | Begründung |", "|---|---|---|"]
+    lines += ["## 1. Wo KI deine Arbeit verändert", ""]
     for item in data.get("exposure", []):
         lines.append(
-            f"| {item.get('task', '')} | {rating_icon(item.get('rating', 'gelb'))} | {item.get('reasoning', '')} |"
+            f"- **{item.get('task', '')}** {rating_icon(item.get('rating', 'gelb'))}: {item.get('reasoning', '')}"
         )
     lines += ["", data.get("exposure_summary", ""), ""]
 
@@ -750,6 +882,79 @@ def render_report(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def markdown_to_basic_html(markdown: str) -> str:
+    html_lines = []
+    in_list = False
+    in_quote = False
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            if in_quote:
+                html_lines.append("</blockquote>")
+                in_quote = False
+            continue
+        if line.startswith("|"):
+            continue
+        if line.startswith("# "):
+            html_lines.append(f"<h1>{escape_html(line[2:])}</h1>")
+            continue
+        if line.startswith("## "):
+            html_lines.append(f"<h2>{escape_html(line[3:])}</h2>")
+            continue
+        if line.startswith("### "):
+            html_lines.append(f"<h3>{escape_html(line[4:])}</h3>")
+            continue
+        if line.startswith("- "):
+            if not in_list:
+                html_lines.append("<ul>")
+                in_list = True
+            html_lines.append(f"<li>{inline_markdown(line[2:])}</li>")
+            continue
+        if line.startswith("> "):
+            if not in_quote:
+                html_lines.append("<blockquote>")
+                in_quote = True
+            html_lines.append(f"<p>{inline_markdown(line[2:])}</p>")
+            continue
+        if in_list:
+            html_lines.append("</ul>")
+            in_list = False
+        if in_quote:
+            html_lines.append("</blockquote>")
+            in_quote = False
+        html_lines.append(f"<p>{inline_markdown(line)}</p>")
+    if in_list:
+        html_lines.append("</ul>")
+    if in_quote:
+        html_lines.append("</blockquote>")
+    return "\n".join(html_lines)
+
+
+def inline_markdown(text: str) -> str:
+    escaped = escape_html(text)
+    escaped = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"\*(.*?)\*", r"<em>\1</em>", escaped)
+    return escaped
+
+
+def report_shell_html(profile: dict[str, Any], report: str, discovery: dict[str, Any] | None) -> str:
+    left_html = f"""
+    <section class="cn-chat-panel cn-report-panel">
+      <div class="cn-heading">
+        <h1>Dein Report</h1>
+        <p>Links der Output, rechts bleiben Unternehmen, Jobs und Marktsignale sichtbar.</p>
+      </div>
+      <article class="cn-report-content">
+        {markdown_to_basic_html(report)}
+      </article>
+    </section>
+"""
+    return app_shell_html(profile, left_html, discovery, status="✓ REPORT READY")
+
+
 def write_report_file(markdown: str) -> str:
     handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".md", encoding="utf-8")
     with handle:
@@ -770,9 +975,12 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
         return (
             gr.update(visible=False),
             gr.update(visible=True),
+            gr.update(visible=True),
             gr.update(visible=False),
-            dashboard_html(profile, teaser, "Profil aus deinem CV", discovery),
+            dashboard_left_html(profile, teaser, "Profil aus deinem CV"),
+            sidebar_html(profile, discovery),
             profile,
+            discovery,
             "",
         )
     except ValueError as exc:
@@ -780,13 +988,26 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             gr.update(visible=True),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=False),
             "",
+            "",
+            {},
             {},
             str(exc) if str(exc) == CV_ERROR else API_ERROR,
         )
     except Exception:
         traceback.print_exc()
-        return (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), "", {}, API_ERROR)
+        return (
+            gr.update(visible=True),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            "",
+            "",
+            {},
+            {},
+            API_ERROR,
+        )
 
 
 def enforce_budget_rules(report_data: dict[str, Any], learning_budget: str) -> dict[str, Any]:
@@ -797,7 +1018,14 @@ def enforce_budget_rules(report_data: dict[str, Any], learning_budget: str) -> d
     return report_data
 
 
-def create_report(profile: dict[str, Any], adaptation: str, time_budget: str, learning_budget: str, trigger: str):
+def create_report(
+    profile: dict[str, Any],
+    discovery: dict[str, Any],
+    adaptation: str,
+    time_budget: str,
+    learning_budget: str,
+    trigger: str,
+):
     print("DEBUG create_report called", flush=True)
     try:
         if not profile:
@@ -818,18 +1046,17 @@ def create_report(profile: dict[str, Any], adaptation: str, time_budget: str, le
         download_path = write_report_file(report)
         return (
             gr.update(visible=False),
-            gr.update(visible=False),
             gr.update(visible=True),
-            report,
+            f'<article class="cn-report-content">{markdown_to_basic_html(report)}</article>',
             download_path,
             "",
         )
     except ValueError as exc:
         message = str(exc) if str(exc) != CV_ERROR else CV_ERROR
-        return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), "", None, message)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, message)
     except Exception:
         traceback.print_exc()
-        return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)
 
 
 def reset_app():
@@ -838,9 +1065,12 @@ def reset_app():
         gr.update(visible=True),
         gr.update(visible=False),
         gr.update(visible=False),
+        gr.update(visible=False),
         None,
         "",
         "",
+        "",
+        {},
         {},
         None,
         None,
@@ -971,10 +1201,15 @@ footer,
 }
 .cn-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: 22px;
   flex: 1;
   min-height: 0;
+}
+.cn-live-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr) !important;
+  align-items: start !important;
 }
 .cn-chat-panel, .cn-side-card, .interview-panel, .report-shell {
   border: 1px solid var(--cn-line);
@@ -1056,6 +1291,8 @@ footer,
   flex-direction: column;
   gap: 16px;
   min-height: 0;
+  position: sticky;
+  top: 18px;
 }
 .cn-side-card {
   border-radius: 18px;
@@ -1151,6 +1388,45 @@ footer,
 .cn-muted {
   color: var(--cn-muted);
 }
+.cn-report-panel {
+  overflow: auto;
+}
+.cn-report-content {
+  color: var(--cn-text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.cn-report-content h1,
+.cn-report-content h2,
+.cn-report-content h3 {
+  color: var(--cn-primary);
+  line-height: 1.2;
+}
+.cn-report-content h1 {
+  font-size: 28px;
+  margin: 0 0 14px;
+}
+.cn-report-content h2 {
+  font-size: 19px;
+  margin: 24px 0 8px;
+}
+.cn-report-content h3 {
+  font-size: 15px;
+  margin: 18px 0 8px;
+}
+.cn-report-content p,
+.cn-report-content ul {
+  margin: 0 0 12px;
+}
+.cn-report-content li {
+  margin: 0 0 7px;
+}
+.cn-report-content blockquote {
+  border-left: 3px solid var(--cn-accent);
+  margin: 14px 0;
+  padding-left: 14px;
+  color: var(--cn-soft);
+}
 .interview-panel, .report-shell {
   border-radius: 18px;
   padding: 22px 24px;
@@ -1189,6 +1465,9 @@ button.primary {
   .cn-grid {
     grid-template-columns: 1fr;
   }
+  .cn-live-layout {
+    grid-template-columns: 1fr !important;
+  }
   .cn-topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -1203,6 +1482,7 @@ button.primary {
   .cn-sidebar {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    position: static;
   }
   .cn-side-card {
     min-height: 150px;
@@ -1235,6 +1515,7 @@ button.primary {
 
 with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
     profile_state = gr.State({})
+    discovery_state = gr.State({})
 
     with gr.Column(visible=True, elem_classes=["container", "upload-shell"]) as screen_upload:
         with gr.Column(elem_classes="upload-panel"):
@@ -1246,38 +1527,50 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
             gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
 
-    with gr.Column(visible=False, elem_classes="container") as screen_interview:
-        teaser_markdown = gr.HTML()
-        with gr.Column(elem_classes="interview-panel"):
-            gr.Markdown("## Kurzinterview")
-            gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird. Die Report-Erstellung kann mit großen Modellen 60–120 Sekunden dauern.")
-            with gr.Row():
-                adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
-                time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
-            with gr.Row():
-                learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
-                trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=4)
-            report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
-            gr.Markdown("Während der Erstellung bleibt diese Ansicht sichtbar. Warte bitte, bis der Report automatisch erscheint.", elem_classes="privacy")
-            interview_error = gr.Markdown()
-
-    with gr.Column(visible=False, elem_classes=["container", "report-shell"]) as screen_report:
-        report_markdown = gr.Markdown()
-        download_button = gr.DownloadButton("Report als Markdown herunterladen")
-        reset_button = gr.Button("Neue Analyse")
+    with gr.Column(visible=False, elem_classes="container") as screen_workspace:
+        with gr.Row(elem_classes=["cn-grid", "cn-live-layout"]):
+            with gr.Column():
+                teaser_markdown = gr.HTML()
+                with gr.Column(visible=True, elem_classes="interview-panel") as interaction_panel:
+                    gr.Markdown("## Kurzinterview")
+                    gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird. Die Report-Erstellung kann mit großen Modellen 60–120 Sekunden dauern.")
+                    with gr.Row():
+                        adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
+                        time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
+                    with gr.Row():
+                        learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
+                        trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=4)
+                    report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
+                    gr.Markdown("Während der Erstellung bleibt diese Ansicht sichtbar. Warte bitte, bis der Report automatisch erscheint.", elem_classes="privacy")
+                    interview_error = gr.Markdown()
+                with gr.Column(visible=False, elem_classes="report-shell") as report_panel:
+                    report_markdown = gr.HTML()
+                    download_button = gr.DownloadButton("Report als Markdown herunterladen")
+                    reset_button = gr.Button("Neue Analyse")
+            live_sidebar = gr.HTML()
 
     start_button.click(
         fn=start_analysis,
         inputs=[cv_file, cv_text],
-        outputs=[screen_upload, screen_interview, screen_report, teaser_markdown, profile_state, upload_error],
+        outputs=[
+            screen_upload,
+            screen_workspace,
+            interaction_panel,
+            report_panel,
+            teaser_markdown,
+            live_sidebar,
+            profile_state,
+            discovery_state,
+            upload_error,
+        ],
         api_name=False,
         show_progress="full",
         scroll_to_output=True,
     )
     report_button.click(
         fn=create_report,
-        inputs=[profile_state, adaptation, time_budget, learning_budget, trigger],
-        outputs=[screen_upload, screen_interview, screen_report, report_markdown, download_button, interview_error],
+        inputs=[profile_state, discovery_state, adaptation, time_budget, learning_budget, trigger],
+        outputs=[interaction_panel, report_panel, report_markdown, download_button, interview_error],
         api_name=False,
         show_progress="full",
         scroll_to_output=True,
@@ -1287,12 +1580,15 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
         inputs=[],
         outputs=[
             screen_upload,
-            screen_interview,
-            screen_report,
+            screen_workspace,
+            interaction_panel,
+            report_panel,
             cv_file,
             cv_text,
             teaser_markdown,
+            live_sidebar,
             profile_state,
+            discovery_state,
             adaptation,
             time_budget,
             learning_budget,
