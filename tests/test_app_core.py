@@ -289,11 +289,24 @@ class AppCoreTests(unittest.TestCase):
         )
 
         self.assertIn('class="cn-layer-stack"', html)
+        self.assertIn("Profile understanding", html)
+        self.assertIn("What I understood before asking more", html)
+        self.assertIn("Strong evidence", html)
+        self.assertIn("Unclear", html)
+        self.assertIn("Questions that matter", html)
         self.assertIn("<details", html)
         self.assertIn("Questions to answer before discovery", html)
         self.assertIn("Next: answer the short interview below", html)
         self.assertIn("founder support", html)
         self.assertIn("Cleantech", html)
+
+    def test_profile_understanding_flags_missing_confidence_inputs(self):
+        understanding = app.profile_understanding({"current_role": "Analyst"})
+
+        self.assertIn("Target industry needs confirmation.", understanding["unclear"])
+        self.assertIn("Skill strengths need confirmation.", understanding["unclear"])
+        self.assertTrue(any("AI/tool usage" in item for item in understanding["unclear"]))
+        self.assertTrue(any("Current role: Analyst" in item for item in understanding["detected"]))
 
     def test_create_report_requires_and_passes_clarifying_answers(self):
         profile = {

@@ -959,6 +959,94 @@ def profile_questions(profile: dict[str, Any]) -> list[str]:
     ]
 
 
+def profile_understanding(profile: dict[str, Any]) -> dict[str, list[str]]:
+    role = str(profile.get("current_role") or "").strip()
+    industry = str(profile.get("industry") or "").strip()
+    seniority = str(profile.get("seniority") or "").strip()
+    years = profile.get("years_experience")
+    skills = [str(skill).strip() for skill in (profile.get("skills") or []) if str(skill).strip()]
+    tool_signals = [str(signal).strip() for signal in (profile.get("ai_tool_signals") or []) if str(signal).strip()]
+
+    tasks: list[str] = []
+    for role_item in profile.get("roles") or []:
+        if not isinstance(role_item, dict):
+            continue
+        for task in role_item.get("key_tasks") or []:
+            task_text = str(task).strip()
+            if task_text and task_text not in tasks:
+                tasks.append(task_text)
+
+    years_label = f"{years:g} years" if isinstance(years, (int, float)) else ""
+    detected = [
+        f"Current role: {role or 'not clear yet'}",
+        f"Domain: {industry or 'not clear yet'}",
+        f"Seniority: {' / '.join(part for part in [seniority, years_label] if part) or 'not clear yet'}",
+    ]
+
+    evidence: list[str] = []
+    evidence.extend(f"Task evidence: {task}" for task in tasks[:3])
+    evidence.extend(f"Skill evidence: {skill}" for skill in skills[:3])
+    evidence.extend(f"Tool signal: {signal}" for signal in tool_signals[:2])
+    if not evidence:
+        evidence.append("The CV has enough structure to start, but explicit proof is thin.")
+
+    unclear: list[str] = []
+    if not industry:
+        unclear.append("Target industry needs confirmation.")
+    if not isinstance(years, (int, float)):
+        unclear.append("Experience length needs confirmation.")
+    if not skills:
+        unclear.append("Skill strengths need confirmation.")
+    if not tasks:
+        unclear.append("Daily work and responsibilities need sharper detail.")
+    if not tool_signals:
+        unclear.append("Current AI/tool usage is not visible from the CV.")
+    if not unclear:
+        unclear.append("The main uncertainty is preference: what should change, what should stay, and what proof feels realistic.")
+
+    return {
+        "detected": detected,
+        "evidence": evidence[:6],
+        "unclear": unclear[:5],
+        "questions": profile_questions(profile)[:3],
+    }
+
+
+def compact_list_html(items: list[str]) -> str:
+    rows = "".join(f"<li>{escape_html(item)}</li>" for item in items if item)
+    return f"<ul>{rows}</ul>" if rows else '<p class="cn-muted">Nothing detected yet.</p>'
+
+
+def profile_understanding_html(profile: dict[str, Any]) -> str:
+    understanding = profile_understanding(profile)
+    return f"""
+        <div class="cn-understanding">
+          <div class="cn-understanding-head">
+            <span>Profile understanding</span>
+            <strong>What I understood before asking more</strong>
+          </div>
+          <div class="cn-understanding-grid">
+            <article class="cn-understanding-card">
+              <h3>Detected</h3>
+              {compact_list_html(understanding["detected"])}
+            </article>
+            <article class="cn-understanding-card">
+              <h3>Strong evidence</h3>
+              {compact_list_html(understanding["evidence"])}
+            </article>
+            <article class="cn-understanding-card">
+              <h3>Unclear</h3>
+              {compact_list_html(understanding["unclear"])}
+            </article>
+            <article class="cn-understanding-card">
+              <h3>Questions that matter</h3>
+              {compact_list_html(understanding["questions"])}
+            </article>
+          </div>
+        </div>
+"""
+
+
 def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
     role = escape_html(profile.get("current_role") or "CV profile")
     industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
@@ -975,7 +1063,7 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
       </div>
       <div class="cn-messages">
         <div class="cn-assistant">
-          Your CV is parsed. Before searching jobs or companies, I need your direction. The useful output is not a generic report; it is a set of testable career perspectives.
+          Your CV is parsed. First, check what I understood. Then answer the fields below so the app can propose directions before it searches jobs, companies, courses, or people.
           <div class="cn-chips">
             <span>Clarify direction</span>
             <span>Test perspectives</span>
@@ -983,6 +1071,7 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
           </div>
         </div>
         <div class="cn-user">CV: {escape_html(source_label)}</div>
+        {profile_understanding_html(profile)}
         <div class="cn-layer-stack">
           <details class="cn-layer-panel">
             <summary><span>Profile read</span><strong>First observations</strong></summary>
@@ -2080,6 +2169,55 @@ footer,
   display: grid;
   gap: 10px;
 }
+.cn-understanding {
+  border: 1px solid rgba(104,211,145,.24);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  padding: 12px;
+}
+.cn-understanding-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.cn-understanding-head span {
+  color: var(--cn-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.cn-understanding-head strong {
+  color: var(--cn-primary);
+  font-size: 14px;
+}
+.cn-understanding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cn-understanding-card {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: rgba(255,255,255,.035);
+}
+.cn-understanding-card h3 {
+  margin: 0 0 7px;
+  color: var(--cn-primary);
+  font-size: 12.5px;
+}
+.cn-understanding-card ul {
+  margin: 0;
+  padding-left: 17px;
+  color: var(--cn-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.cn-understanding-card li {
+  margin-bottom: 5px;
+}
 .cn-layer-panel {
   border: 1px solid var(--cn-line);
   border-radius: 10px;
@@ -2584,7 +2722,8 @@ button.primary {
   .cn-card-grid,
   .cn-course-grid,
   .cn-two-column,
-  .cn-feedback-grid {
+  .cn-feedback-grid,
+  .cn-understanding-grid {
     grid-template-columns: 1fr;
   }
   .cn-tab-panels {
