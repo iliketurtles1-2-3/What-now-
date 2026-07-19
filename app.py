@@ -4,6 +4,9 @@ import os
 import re
 import tempfile
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,11 @@ MODEL = os.getenv("LLM_MODEL", DEFAULT_MODELS.get(LLM_PROVIDER, "claude-sonnet-4
 MAX_PDF_BYTES = 10 * 1024 * 1024
 CV_ERROR = "Der Lebenslauf konnte nicht gelesen werden. Bitte lade ein PDF hoch oder füge den Text direkt ein."
 API_ERROR = "Die Analyse ist gerade nicht verfügbar. Bitte versuche es in einer Minute erneut."
+LIVE_DATA_TIMEOUT = float(os.getenv("LIVE_DATA_TIMEOUT", "8"))
+ARBEITNOW_BASE_URL = os.getenv("ARBEITNOW_BASE_URL", "https://www.arbeitnow.com/api/job-board-api")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
+LIVE_SEARCH_PROVIDER = os.getenv("LIVE_SEARCH_PROVIDER", "tavily" if TAVILY_API_KEY else "serpapi").strip().lower()
 
 ADAPTATION_OPTIONS = [
     "🟢 Optimieren – Ich will in meiner Rolle bleiben und smarter mit KI arbeiten",
@@ -46,18 +54,7 @@ Antworte NUR mit validem JSON, exakt in diesem Schema:
     "ai_tool_signals": [string, ...],
     "languages": [string, ...]
   },
-  "teaser": [string, string, string],
-  "discovery": {
-    "companies": [
-      {"name": string, "why": string}
-    ],
-    "jobs": [
-      {"title": string, "why": string}
-    ],
-    "recent_information": [
-      {"topic": string, "why_it_matters": string}
-    ]
-  }
+  "teaser": [string, string, string]
 }
 
 Regeln für die Teaser-Beobachtungen:
@@ -67,9 +64,6 @@ Regeln für die Teaser-Beobachtungen:
 - Beobachtung 3: Eine überraschende oder nicht offensichtliche Chance, die sich aus dem Profil ergibt.
 - Sei spezifisch: beziehe dich auf konkrete Stationen/Tätigkeiten aus dem Lebenslauf, nie generisch.
 - "ai_tool_signals": alle Hinweise auf bereits vorhandene KI-Tool-Nutzung; leere Liste wenn keine.
-- "discovery.companies": genau 3 real existierende Unternehmen oder Organisationstypen, die zum Profil passen. Wenn du bei einem konkreten Namen unsicher bist, nenne stattdessen einen Organisationstyp. Keine offenen Stellen behaupten.
-- "discovery.jobs": genau 3 realistische Rollenbezeichnungen, jeweils mit kurzer Begründung aus dem Profil. Keine offenen Stellen behaupten.
-- "discovery.recent_information": genau 3 aktuelle, relevante Markt- oder KI-Entwicklungen. Keine Daten, Ereignisse oder Quellen erfinden; bei unsicherer Aktualität als beobachtbaren Trend formulieren.
 """.strip()
 
 PROMPT_2 = """
@@ -311,6 +305,196 @@ def escape_html(value: Any) -> str:
     )
 
 
+def request_json(url: str, *, params: dict[str, Any] | None = None, payload: dict[str, Any] | None = None) -> Any:
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    data = None
+    headers = {"Accept": "application/json", "User-Agent": "ai-career-navigator/0.1"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(request, timeout=LIVE_DATA_TIMEOUT) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def profile_query(profile: dict[str, Any], *, max_skills: int = 3) -> str:
+    parts = [
+        str(profile.get("current_role") or "").strip(),
+        str(profile.get("industry") or "").strip(),
+    ]
+    parts.extend(str(skill).strip() for skill in (profile.get("skills") or [])[:max_skills])
+    return " ".join(part for part in parts if part)
+
+
+def result_domain(url: str) -> str:
+    try:
+        host = urllib.parse.urlparse(url).netloc
+    except ValueError:
+        return ""
+    return host.replace("www.", "")
+
+
+def keyword_set(text: str) -> set[str]:
+    return {token for token in re.findall(r"[A-Za-zÄÖÜäöüß0-9+#.]{3,}", text.lower())}
+
+
+def search_live_web(query: str, *, topic: str = "general", max_results: int = 3) -> list[dict[str, str]]:
+    if not query:
+        return []
+    if LIVE_SEARCH_PROVIDER == "tavily" and TAVILY_API_KEY:
+        payload = {
+            "api_key": TAVILY_API_KEY,
+            "query": query,
+            "topic": topic,
+            "search_depth": "basic",
+            "max_results": max_results,
+            "include_answer": False,
+        }
+        data = request_json("https://api.tavily.com/search", payload=payload)
+        return [
+            {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", ""),
+                "source": "Tavily",
+            }
+            for item in data.get("results", [])[:max_results]
+            if isinstance(item, dict)
+        ]
+    if SERPAPI_API_KEY:
+        params = {
+            "engine": "google",
+            "q": query,
+            "api_key": SERPAPI_API_KEY,
+            "num": max_results,
+            "hl": "de",
+        }
+        if topic == "news":
+            params["tbm"] = "nws"
+        data = request_json("https://serpapi.com/search.json", params=params)
+        source_items = data.get("news_results") if topic == "news" else data.get("organic_results")
+        return [
+            {
+                "title": item.get("title", ""),
+                "url": item.get("link", ""),
+                "snippet": item.get("snippet", "") or item.get("source", ""),
+                "source": "SerpAPI",
+            }
+            for item in (source_items or [])[:max_results]
+            if isinstance(item, dict)
+        ]
+    return []
+
+
+def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
+    query = f'hiring companies Germany "{profile_query(profile)}"'
+    results = search_live_web(query, max_results=3)
+    return [
+        {
+            "name": item.get("title") or result_domain(item.get("url", "")),
+            "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
+            "url": item.get("url", ""),
+            "source": item.get("source", ""),
+        }
+        for item in results
+        if item.get("title") or item.get("url")
+    ]
+
+
+def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
+    query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
+    jobs: list[dict[str, str]] = []
+    try:
+        data = request_json(ARBEITNOW_BASE_URL)
+        keywords = keyword_set(query)
+        ranked_items = []
+        for item in data.get("data", [])[:50]:
+            if not isinstance(item, dict):
+                continue
+            haystack = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("company_name") or ""),
+                    str(item.get("location") or ""),
+                    " ".join(str(tag) for tag in item.get("tags", []) if tag),
+                ]
+            )
+            score = len(keywords & keyword_set(haystack))
+            ranked_items.append((score, item))
+        ranked_items.sort(key=lambda pair: pair[0], reverse=True)
+        for score, item in ranked_items:
+            if score == 0:
+                break
+            if not isinstance(item, dict):
+                continue
+            title = item.get("title", "")
+            company = item.get("company_name", "")
+            location = item.get("location", "")
+            url = item.get("url", "")
+            if title:
+                jobs.append(
+                    {
+                        "title": title,
+                        "why": " · ".join(part for part in [company, location] if part) or "Live-Job aus Arbeitnow",
+                        "url": url,
+                        "source": "Arbeitnow",
+                    }
+                )
+            if len(jobs) == 3:
+                break
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        jobs = []
+    if jobs:
+        return jobs
+
+    results = search_live_web(f'site:linkedin.com/jobs OR site:indeed.com "{query}" Germany', max_results=3)
+    return [
+        {
+            "title": item.get("title") or "Live-Jobtreffer",
+            "why": item.get("snippet") or item.get("url") or "Live-Suchergebnis",
+            "url": item.get("url", ""),
+            "source": item.get("source", ""),
+        }
+        for item in results
+        if item.get("title") or item.get("url")
+    ]
+
+
+def recent_information(profile: dict[str, Any]) -> list[dict[str, str]]:
+    query = f'latest AI job market news Germany "{profile_query(profile, max_skills=2)}"'
+    results = search_live_web(query, topic="news", max_results=3)
+    return [
+        {
+            "topic": item.get("title") or result_domain(item.get("url", "")),
+            "why_it_matters": item.get("snippet") or item.get("url") or "Aktuelles Live-Signal",
+            "url": item.get("url", ""),
+            "source": item.get("source", ""),
+        }
+        for item in results
+        if item.get("title") or item.get("url")
+    ]
+
+
+def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
+    discovery = {
+        "companies": [],
+        "jobs": [],
+        "recent_information": [],
+        "live_enabled": bool(TAVILY_API_KEY or SERPAPI_API_KEY or ARBEITNOW_BASE_URL),
+    }
+    try:
+        discovery["companies"] = interesting_companies(profile)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["companies"] = []
+    discovery["jobs"] = interesting_jobs(profile)
+    try:
+        discovery["recent_information"] = recent_information(profile)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["recent_information"] = []
+    return discovery
+
+
 def exposure_level_for_task(task: str) -> tuple[str, str]:
     lower = task.lower()
     high_terms = ["report", "analyse", "daten", "content", "text", "recherche", "dokument", "crm", "seo"]
@@ -336,9 +520,13 @@ def discovery_rows(
             primary = escape_html(item.get(primary_key))
             secondary = escape_html(item.get(secondary_key))
             if primary:
+                source = escape_html(item.get("source"))
+                url = escape_html(item.get("url"))
+                source_label = f'<em>{source}</em>' if source else ""
+                link_label = f' <a href="{url}" target="_blank" rel="noopener noreferrer">öffnen</a>' if url else ""
                 rows.append(
                     f'<div class="cn-discovery-item"><strong>{primary}</strong>'
-                    f'<span>{secondary}</span></div>'
+                    f'<span>{secondary}</span><small>{source_label}{link_label}</small></div>'
                 )
     if not rows:
         rows.append(f'<div class="cn-muted">{escape_html(empty_label)}</div>')
@@ -391,6 +579,12 @@ def dashboard_html(
         "topic",
         "why_it_matters",
         "Wird nach der Analyse ergänzt",
+    )
+    live_search_configured = bool(TAVILY_API_KEY or SERPAPI_API_KEY)
+    live_note = (
+        "Live-Daten: Arbeitnow + Web/News-Suche"
+        if live_search_configured
+        else "Live-Jobs aktiv · Web/News API fehlt: TAVILY_API_KEY oder SERPAPI_API_KEY setzen"
     )
     pressure = "MEDIUM"
     pressure_color = "#e0c85b"
@@ -466,17 +660,19 @@ def dashboard_html(
         <div class="cn-kicker">COMPANIES</div>
         <h2>Interessante Unternehmen</h2>
         <div class="cn-discovery-list">{company_rows}</div>
+        <p class="cn-data-note">{escape_html(live_note)}</p>
       </section>
       <section class="cn-side-card cn-discovery-card">
         <div class="cn-kicker">JOBS</div>
         <h2>Interessante Rollen</h2>
         <div class="cn-discovery-list">{job_rows}</div>
+        <p class="cn-data-note">Live-Jobs via Arbeitnow, Fallback via Web-Suche</p>
       </section>
       <section class="cn-side-card cn-discovery-card">
         <div class="cn-kicker">RECENT SIGNALS</div>
         <h2>Aktuelle Entwicklungen</h2>
         <div class="cn-discovery-list">{information_rows}</div>
-        <p class="cn-data-note">KI-generierte Marktimpulse · keine Live-News</p>
+        <p class="cn-data-note">{escape_html(live_note)}</p>
       </section>
     </aside>
   </div>
@@ -570,7 +766,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
         if profile_is_empty(profile):
             raise ValueError(CV_ERROR)
         teaser = result.get("teaser", [])
-        discovery = result.get("discovery", {})
+        discovery = live_discovery(profile)
         return (
             gr.update(visible=False),
             gr.update(visible=True),
@@ -922,6 +1118,17 @@ footer,
   color: var(--cn-muted);
   font-size: 11.5px;
   line-height: 1.4;
+}
+.cn-discovery-item small {
+  color: var(--cn-soft);
+  font: 500 10px JetBrains Mono, monospace;
+}
+.cn-discovery-item a {
+  color: var(--cn-accent);
+  text-decoration: none;
+}
+.cn-discovery-item a:hover {
+  text-decoration: underline;
 }
 .cn-side-card .cn-data-note {
   margin: 2px 0 0;

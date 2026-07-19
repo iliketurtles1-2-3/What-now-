@@ -76,6 +76,28 @@ python app.py
 
 Leave `OPENAI_JSON_MODE` unset for OpenRouter unless your selected model explicitly supports OpenAI JSON mode.
 
+## Live Discovery Tiles
+
+The sidebar tiles use live data at runtime:
+
+- Jobs: Arbeitnow job board API by default (`ARBEITNOW_BASE_URL`)
+- Companies and recent signals: Tavily or SerpAPI web/news search
+
+Configure one search provider for full live tiles:
+
+```bash
+export TAVILY_API_KEY=your_tavily_key_here
+```
+
+or:
+
+```bash
+export SERPAPI_API_KEY=your_serpapi_key_here
+export LIVE_SEARCH_PROVIDER=serpapi
+```
+
+Without Tavily or SerpAPI, the app still tries live jobs from Arbeitnow, but company and recent-news tiles show a configuration note instead of AI-invented results.
+
 The app binds to `0.0.0.0:7860`. Open:
 
 ```text
