@@ -9,6 +9,7 @@
     "format": "course",
     "cost_type": "audit_free",
     "cost_note": "Free audit available; certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 7,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -23,6 +24,7 @@
     "format": "course",
     "cost_type": "audit_free",
     "cost_note": "Free audit available; certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 6,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -37,6 +39,7 @@
     "format": "short_course",
     "cost_type": "free",
     "cost_note": "Free short course",
+    "cost_eur": 0,
     "time_hours": 1.5,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -51,6 +54,7 @@
     "format": "short_course",
     "cost_type": "free",
     "cost_note": "Free short course",
+    "cost_eur": 0,
     "time_hours": 2,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -65,6 +69,7 @@
     "format": "short_course",
     "cost_type": "free",
     "cost_note": "Free short course",
+    "cost_eur": 0,
     "time_hours": 1.5,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -79,6 +84,7 @@
     "format": "short_course",
     "cost_type": "free",
     "cost_note": "Free short course",
+    "cost_eur": 0,
     "time_hours": 2,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -93,6 +99,7 @@
     "format": "short_course",
     "cost_type": "free",
     "cost_note": "Free short course",
+    "cost_eur": 0,
     "time_hours": 1.5,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -107,6 +114,7 @@
     "format": "specialization",
     "cost_type": "audit_free",
     "cost_note": "Free audit available for course content; certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 80,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -121,6 +129,7 @@
     "format": "course",
     "cost_type": "audit_free",
     "cost_note": "Free audit available; certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 13,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -135,6 +144,7 @@
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free Kaggle Learn course",
+    "cost_eur": 0,
     "time_hours": 3,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -149,6 +159,7 @@
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free Kaggle Learn course",
+    "cost_eur": 0,
     "time_hours": 5,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -163,6 +174,7 @@
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free Kaggle Learn course",
+    "cost_eur": 0,
     "time_hours": 4,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -177,6 +189,7 @@
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free Kaggle Learn course",
+    "cost_eur": 0,
     "time_hours": 4,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -191,6 +204,7 @@
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free course materials",
+    "cost_eur": 0,
     "time_hours": 20,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -205,6 +219,7 @@
     "format": "learning_path",
     "cost_type": "free",
     "cost_note": "Free learning path; some labs may require credits",
+    "cost_eur": 0,
     "time_hours": 9,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -219,20 +234,22 @@
     "format": "module",
     "cost_type": "free",
     "cost_note": "Free Microsoft Learn module",
+    "cost_eur": 0,
     "time_hours": 1,
     "language": "English",
     "last_verified": "2026-07-19"
   },
   {
     "id": "microsoft-learn-prompt-engineering",
-    "title": "Fundamentals of prompt engineering",
+    "title": "Create effective prompts for generative AI training tools",
     "provider": "Microsoft Learn",
-    "url": "https://learn.microsoft.com/en-us/training/modules/fundamentals-prompt-engineering/",
+    "url": "https://learn.microsoft.com/en-us/training/modules/create-prompts-for-generative-ai-training-tools/",
     "skills": ["prompt engineering", "generative ai", "microsoft copilot", "workflow automation"],
     "level": "beginner",
     "format": "module",
     "cost_type": "free",
     "cost_note": "Free Microsoft Learn module",
+    "cost_eur": 0,
     "time_hours": 1,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -241,41 +258,44 @@
     "id": "microsoft-learn-responsible-ai",
     "title": "Embrace responsible AI principles and practices",
     "provider": "Microsoft Learn",
-    "url": "https://learn.microsoft.com/en-us/training/modules/responsible-ai-principles/",
+    "url": "https://learn.microsoft.com/en-us/training/modules/embrace-responsible-ai-principles-practices/",
     "skills": ["responsible ai", "ai governance", "risk management"],
     "level": "beginner",
     "format": "module",
     "cost_type": "free",
     "cost_note": "Free Microsoft Learn module",
+    "cost_eur": 0,
     "time_hours": 1,
     "language": "English",
     "last_verified": "2026-07-19"
   },
   {
     "id": "google-analytics-academy-ga4",
-    "title": "Google Analytics 4 on Skillshop",
+    "title": "Analytics Academy",
     "provider": "Google Skillshop",
-    "url": "https://skillshop.docebosaas.com/learn/course/external/view/elearning/17656/google-analytics-4",
+    "url": "https://support.google.com/analytics/answer/15440208?hl=en",
     "skills": ["analytics", "measurement", "digital marketing", "data interpretation"],
     "level": "beginner",
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free Google Skillshop course",
+    "cost_eur": 0,
     "time_hours": 4,
     "language": "English",
     "last_verified": "2026-07-19"
   },
   {
     "id": "hubspot-ai-for-marketers",
-    "title": "AI for Marketers",
+    "title": "AI for Marketing",
     "provider": "HubSpot Academy",
-    "url": "https://academy.hubspot.com/courses/ai-for-marketers",
+    "url": "https://academy.hubspot.com/courses/AI-for-Marketers",
     "skills": ["marketing ai", "content automation", "prompt engineering", "workflow automation"],
     "level": "beginner",
     "format": "course",
     "cost_type": "free",
     "cost_note": "Free HubSpot Academy course",
-    "time_hours": 2,
+    "cost_eur": 0,
+    "time_hours": 3,
     "language": "English",
     "last_verified": "2026-07-19"
   },
@@ -289,6 +309,7 @@
     "format": "learning_path",
     "cost_type": "subscription",
     "cost_note": "Requires LinkedIn Learning access or trial",
+    "cost_eur": null,
     "time_hours": 15,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -303,6 +324,7 @@
     "format": "course",
     "cost_type": "audit_free",
     "cost_note": "Free audit available; verified certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 90,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -317,6 +339,7 @@
     "format": "course",
     "cost_type": "audit_free",
     "cost_note": "Free audit available; verified certificate requires payment",
+    "cost_eur": 0,
     "time_hours": 8,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -331,6 +354,7 @@
     "format": "professional_certificate",
     "cost_type": "subscription",
     "cost_note": "Coursera subscription or certificate payment required",
+    "cost_eur": null,
     "time_hours": 70,
     "language": "English",
     "last_verified": "2026-07-19"
@@ -345,6 +369,7 @@
     "format": "professional_certificate",
     "cost_type": "subscription",
     "cost_note": "Coursera subscription or certificate payment required",
+    "cost_eur": null,
     "time_hours": 180,
     "language": "English",
     "last_verified": "2026-07-19"

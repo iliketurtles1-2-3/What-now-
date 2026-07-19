@@ -139,6 +139,7 @@ from model memory. Each catalog entry should contain:
   "format": "course",
   "cost_type": "free",
   "cost_note": "Free audit available",
+  "cost_eur": 0,
   "time_hours": 8,
   "language": "English",
   "last_verified": "YYYY-MM-DD"

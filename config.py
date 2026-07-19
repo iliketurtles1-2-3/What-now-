@@ -32,6 +32,13 @@ class AppSettings:
         return "openrouter.ai" in (self.openai_base_url or "").lower()
 
 
+@dataclass(frozen=True)
+class RuntimeSettings:
+    live_data_timeout_seconds: float = 8.0
+    server_name: str = "0.0.0.0"
+    server_port: int = 7860
+
+
 def load_settings(values: Mapping[str, str] | None = None) -> AppSettings:
     env = values if values is not None else environ
     provider = env.get("LLM_PROVIDER", "anthropic").strip().lower()
@@ -73,3 +80,31 @@ def load_settings(values: Mapping[str, str] | None = None) -> AppSettings:
         openai_base_url=base_url,
         timeout_seconds=timeout_seconds,
     )
+
+
+def load_runtime_settings(values: Mapping[str, str] | None = None) -> RuntimeSettings:
+    env = values if values is not None else environ
+    timeout = positive_float(env.get("LIVE_DATA_TIMEOUT"), default=8.0)
+    port = positive_int(env.get("GRADIO_SERVER_PORT"), default=7860, maximum=65535)
+    server_name = env.get("GRADIO_SERVER_NAME", "0.0.0.0").strip() or "0.0.0.0"
+    return RuntimeSettings(
+        live_data_timeout_seconds=timeout,
+        server_name=server_name,
+        server_port=port,
+    )
+
+
+def positive_float(value: str | None, *, default: float) -> float:
+    try:
+        parsed = float(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def positive_int(value: str | None, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+    return parsed if 0 < parsed <= maximum else default

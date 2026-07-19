@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from config import AppSettings, ConfigError, load_settings
+from config import AppSettings, ConfigError, load_runtime_settings, load_settings
 from llm import call_json
 from prompts import load_prompt
 from providers.anthropic import AnthropicProvider
@@ -49,6 +49,30 @@ class ConfigurationTests(unittest.TestCase):
                     "OPENAI_API_MODE": "invalid",
                 }
             )
+
+    def test_runtime_settings_accept_custom_server_values(self):
+        settings = load_runtime_settings(
+            {
+                "LIVE_DATA_TIMEOUT": "12.5",
+                "GRADIO_SERVER_NAME": "127.0.0.1",
+                "GRADIO_SERVER_PORT": "9876",
+            }
+        )
+
+        self.assertEqual(settings.live_data_timeout_seconds, 12.5)
+        self.assertEqual(settings.server_name, "127.0.0.1")
+        self.assertEqual(settings.server_port, 9876)
+
+    def test_malformed_runtime_values_fall_back_without_blocking_startup(self):
+        settings = load_runtime_settings(
+            {
+                "LIVE_DATA_TIMEOUT": "ten",
+                "GRADIO_SERVER_PORT": "occupied",
+            }
+        )
+
+        self.assertEqual(settings.live_data_timeout_seconds, 8.0)
+        self.assertEqual(settings.server_port, 7860)
 
     def test_prompt_loader_uses_versioned_files_and_rejects_traversal(self):
         self.assertIn("structured profile", load_prompt("profile", "legacy-v1"))

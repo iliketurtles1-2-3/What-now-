@@ -42,6 +42,7 @@ def validate_course(course: dict[str, Any]) -> None:
         "format",
         "cost_type",
         "cost_note",
+        "cost_eur",
         "time_hours",
         "language",
         "last_verified",
@@ -55,6 +56,13 @@ def validate_course(course: dict[str, Any]) -> None:
         raise ValueError(f"Course {course['id']} has unsupported level: {course['level']}")
     if not isinstance(course["skills"], list) or not course["skills"]:
         raise ValueError(f"Course {course['id']} must contain at least one skill.")
+    cost_eur = course["cost_eur"]
+    if cost_eur is not None and (
+        not isinstance(cost_eur, int | float) or isinstance(cost_eur, bool) or cost_eur < 0
+    ):
+        raise ValueError(f"Course {course['id']} must use a non-negative numeric cost_eur or null.")
+    if course["cost_type"] in FREE_COMPATIBLE_COSTS and cost_eur != 0:
+        raise ValueError(f"Course {course['id']} must use cost_eur 0 for free-compatible access.")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(course["last_verified"])):
         raise ValueError(f"Course {course['id']} must use YYYY-MM-DD last_verified.")
 
@@ -91,6 +99,9 @@ def match_courses(
                 "course": course,
                 "score": round(score, 3),
                 "matched_gaps": matched_gaps,
+                "matched_gap_labels": [
+                    gap["label"] for gap in gaps if gap["id"] in matched_gaps
+                ],
                 "why": reasons,
             }
         )
@@ -146,7 +157,9 @@ def parse_budget(budget: str | float | int | None) -> float | None:
     clean = budget.strip().lower()
     if clean in {"", "unknown", "any", "unlimited"}:
         return None
-    if "free" in clean or "kostenlos" in clean or clean.startswith("0"):
+    if re.search(r"\b(over|above|more than)\b", clean):
+        return None
+    if "free" in clean or clean.startswith("0"):
         return 0.0
     numbers = re.findall(r"\d+(?:[.,]\d+)?", clean)
     if not numbers:
@@ -159,8 +172,10 @@ def course_fits_constraints(course: dict[str, Any], constraints: MatchConstraint
         return False
     if constraints.max_time_hours is not None and float(course["time_hours"]) > constraints.max_time_hours:
         return False
-    if constraints.max_budget_eur == 0 and course["cost_type"] not in FREE_COMPATIBLE_COSTS:
-        return False
+    if constraints.max_budget_eur is not None:
+        cost_eur = course.get("cost_eur")
+        if cost_eur is None or float(cost_eur) > constraints.max_budget_eur:
+            return False
     if constraints.level and not level_is_suitable(course["level"], constraints.level):
         return False
     return True
@@ -174,6 +189,7 @@ def score_course(
     course_skills = [normalize_text(skill) for skill in course["skills"]]
     course_tokens = set().union(*(tokenize(skill) for skill in course["skills"]))
     matched_gaps = []
+    matched_labels = []
     score = 0.0
 
     for gap in gaps:
@@ -182,21 +198,25 @@ def score_course(
         if not exact and token_overlap == 0:
             continue
         matched_gaps.append(gap["id"])
+        matched_labels.append(gap["label"])
         priority_weight = 1 / gap["priority"]
         score += 8 * priority_weight if exact else 3 * token_overlap * priority_weight
 
     reasons = []
     if matched_gaps:
-        reasons.append("Addresses prioritized skill gap: " + ", ".join(matched_gaps))
+        reasons.append("Addresses prioritized skill gap: " + ", ".join(matched_labels))
     else:
         return 0.0, [], []
     if constraints.max_time_hours is not None:
         time_fit = max(constraints.max_time_hours - float(course["time_hours"]), 0)
         score += min(time_fit / max(constraints.max_time_hours, 1), 1.0)
         reasons.append(f"Fits within {constraints.max_time_hours:g} available hours")
-    if constraints.max_budget_eur == 0 and course["cost_type"] in FREE_COMPATIBLE_COSTS:
+    if constraints.max_budget_eur is not None:
         score += 1.5
-        reasons.append("Fits a zero-budget constraint")
+        if constraints.max_budget_eur == 0:
+            reasons.append("Fits a zero-budget constraint")
+        else:
+            reasons.append(f"Fits within a {constraints.max_budget_eur:g} EUR budget")
     elif course["cost_type"] in FREE_COMPATIBLE_COSTS:
         score += 0.5
     if constraints.level and course["level"] == constraints.level:
@@ -219,6 +239,8 @@ def fallback_for_gap(gap: str, constraints: MatchConstraints) -> dict[str, str]:
         parts.append(constraints.language)
     if constraints.max_budget_eur == 0:
         parts.append("free")
+    elif constraints.max_budget_eur is not None:
+        parts.append(f"under {constraints.max_budget_eur:g} EUR")
     return {
         "gap": gap,
         "search_phrase": " ".join(parts),

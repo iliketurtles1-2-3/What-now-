@@ -34,7 +34,7 @@ only after the combined branch is verified.
 
 Requirements:
 
-- Python 3.11+
+- Python 3.12 (the verified development, CI, and deployment runtime)
 - A reachable API key for your chosen model provider
 - Port `7860` open in your firewall/security group
 
@@ -59,7 +59,7 @@ Anthropic example:
 
 ```bash
 export LLM_PROVIDER=anthropic
-export LLM_MODEL=claude-sonnet-4-6
+export LLM_MODEL=claude-sonnet-5
 export ANTHROPIC_API_KEY=your_api_key_here
 python app.py
 ```
@@ -92,7 +92,7 @@ export LLM_PROVIDER=openai
 export OPENAI_API_MODE=chat
 export LLM_MODEL=z-ai/glm-5.2
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_API_KEY=your_openrouter_key_here
+export OPENROUTER_API_KEY=your_openrouter_key_here
 unset OPENAI_JSON_MODE
 python app.py
 ```
@@ -140,7 +140,7 @@ After=network.target
 User=YOUR_LINUX_USER
 WorkingDirectory=/home/YOUR_LINUX_USER/ai-career-navigator
 Environment=LLM_PROVIDER=anthropic
-Environment=LLM_MODEL=claude-sonnet-4-6
+Environment=LLM_MODEL=claude-sonnet-5
 Environment=ANTHROPIC_API_KEY=your_api_key_here
 ExecStart=/home/YOUR_LINUX_USER/ai-career-navigator/.venv/bin/python app.py
 Restart=always
@@ -189,13 +189,13 @@ sudo certbot --nginx -d your-domain.example
 - Pasted CV text works with every configured provider.
 - PDF upload is sent directly to the provider as file/document input. Anthropic uses a PDF document block. OpenAI uses Responses API file input.
 - Most OpenAI-compatible providers support `OPENAI_API_MODE=chat`, which is best for pasted CV text.
-- PDF upload requires `LLM_PROVIDER=anthropic` or `LLM_PROVIDER=openai` with `OPENAI_API_MODE=responses`.
+- PDF upload works with Anthropic document input, OpenAI Responses file input, and OpenRouter chat file input. Other OpenAI-compatible chat endpoints may not implement the same file-part contract.
 - Some OpenAI-compatible providers may not support JSON response formatting. If that happens, use Anthropic or OpenAI Responses for the CV test run.
 - Files are not persisted by the app. The markdown report download is generated in the system temp directory for the current session.
 
-## Python 3.14 Notes
+## Python Support
 
-Ubuntu releases with Python 3.14 need modern wheels for Gradio's dependency stack. This project pins current versions of Gradio, Pillow, OpenAI, Anthropic, and `audioop-lts` to avoid the common `pyaudioop`, `HfFolder`, and Pillow build failures seen with older packages.
+Python 3.12 is the release target and the only version currently verified in CI. Python 3.13 and 3.14 may work with the pinned `audioop-lts` compatibility package, but they are not claimed as supported until they pass the same installation and test workflow. The project pins current Pillow, OpenAI, Anthropic, and Gradio dependencies to avoid the older Pillow build and `HfFolder` import failures.
 
 If imports fail after a dependency update, recreate the virtual environment:
 

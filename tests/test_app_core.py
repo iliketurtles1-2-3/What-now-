@@ -76,21 +76,6 @@ class AppCoreTests(unittest.TestCase):
         self.assertTrue(content.startswith("Analyze this pasted CV:"))
         self.assertIn("Senior analyst", content)
 
-    def test_enforce_budget_rules_zero_eur_removes_paid_resources(self):
-        report = {
-            "resources": [
-                {
-                    "gap": "Prompt engineering",
-                    "free": [{"name": "Free option"}],
-                    "paid": [{"name": "Paid option"}],
-                }
-            ]
-        }
-
-        result = app.enforce_budget_rules(report, "0 EUR (free only)")
-
-        self.assertEqual(result["resources"][0]["paid"], [])
-
     def test_discovery_rows_links_http_urls_only(self):
         html = app.discovery_rows(
             [
@@ -125,6 +110,54 @@ class AppCoreTests(unittest.TestCase):
 
         with patch.object(app, "call_model", fake_call_model):
             self.assertEqual(app.call_json("schema prompt", "payload", 100), {"ok": True})
+
+    def test_unverified_model_courses_are_removed_when_catalog_has_no_match(self):
+        report = {
+            "gaps": [{"gap": "Quantum portfolio optimization", "priority": 1}],
+            "resources": [
+                {
+                    "gap": "Quantum portfolio optimization",
+                    "free": [{"name": "Invented model course"}],
+                    "paid": [],
+                }
+            ],
+        }
+
+        result = app.apply_verified_courses(
+            report,
+            learning_budget="0 EUR (free only)",
+            time_budget="< 2 hours/week",
+            adaptation="Optimize - I want to stay in my role and use AI better",
+        )
+
+        self.assertEqual(result["resources"], [])
+        self.assertEqual(
+            result["course_fallbacks"][0]["gap"],
+            "Quantum portfolio optimization",
+        )
+
+    def test_verified_course_resources_keep_original_gap_label(self):
+        resources, _ = app.verified_course_resources(
+            [{"gap": "Prompt Engineering", "priority": 1}],
+            learning_budget="0 EUR (free only)",
+            time_budget="2-5 hours/week",
+            adaptation="Optimize - I want to stay in my role and use AI better",
+        )
+
+        self.assertTrue(resources)
+        self.assertEqual(resources[0]["gap"], "Prompt Engineering")
+
+    def test_sidebar_courses_use_catalog_and_discovery_note_is_honest(self):
+        suggestions = app.course_suggestions(
+            {"skills": ["prompt engineering"], "current_role": "Coordinator"}
+        )
+
+        self.assertTrue(suggestions)
+        self.assertTrue(all(item["url"].startswith("https://") for item in suggestions))
+        sidebar = app.sidebar_html({"current_role": "Coordinator", "skills": []}, {})
+        self.assertIn("verified local course catalog", sidebar)
+        if not (app.TAVILY_API_KEY or app.SERPAPI_API_KEY):
+            self.assertIn("web search not configured", sidebar)
 
 
 if __name__ == "__main__":

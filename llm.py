@@ -87,8 +87,8 @@ def call_json(
     first_response = invoke(system_prompt, user_content, max_tokens)
     try:
         return parse_json_response(first_response)
-    except json.JSONDecodeError as first_error:
-        print(f"Initial JSON parse failed: {first_error}")
+    except json.JSONDecodeError:
+        pass
 
     repair_prompt = (
         f"{system_prompt}\n\n"

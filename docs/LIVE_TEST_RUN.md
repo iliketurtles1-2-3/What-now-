@@ -19,14 +19,14 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If your system only has Python 3.13 or 3.14, install with:
+Python 3.12 is the verified release target. If you intentionally test Python 3.13 or 3.14, install the native build dependencies first:
 
 ```bash
 sudo apt update
 sudo apt install python3-venv python3-pip build-essential libjpeg-dev zlib1g-dev
 ```
 
-The project includes `audioop-lts` for Python 3.13+ because Gradio/Pydub may need it.
+The project includes `audioop-lts` for Python 3.13+, but those Python versions are not release-gated in CI yet.
 
 ## OpenRouter Configuration
 
@@ -36,12 +36,12 @@ Use OpenRouter through the OpenAI-compatible client:
 export LLM_PROVIDER=openai
 export OPENAI_API_MODE=chat
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_API_KEY="your_openrouter_api_key"
-export LLM_MODEL="z-ai/glm-4.5"
-export OPENAI_JSON_MODE=true
+export OPENROUTER_API_KEY="your_openrouter_api_key"
+export LLM_MODEL="z-ai/glm-5.2"
+unset OPENAI_JSON_MODE
 ```
 
-If the exact GLM 5.2 model slug differs in OpenRouter, replace `LLM_MODEL` with the slug shown in your OpenRouter dashboard.
+`z-ai/glm-5.2` is the verified OpenRouter model slug. The app also accepts the key through `OPENAI_API_KEY`, but `OPENROUTER_API_KEY` makes the provider configuration clearer.
 
 ## Start The App
 

@@ -13,7 +13,7 @@ from typing import Any
 
 import gradio as gr
 
-from config import ConfigError
+from config import ConfigError, load_runtime_settings
 from courses.matcher import match_courses
 from llm import call_json as llm_call_json
 from llm import call_model as llm_call_model
@@ -24,9 +24,9 @@ from prompts import load_prompt
 MAX_PDF_BYTES = 10 * 1024 * 1024
 CV_ERROR = "I could not read the CV. Please upload a PDF or paste at least 300 characters of CV text."
 API_ERROR = "The analysis is not available right now. Please try again in a minute."
-CONFIG_ERROR = "Missing API key for the selected provider. Check your .env or environment variables."
-JSON_RESPONSE_ERROR = "The AI provider returned an invalid response. Please try again."
-LIVE_DATA_TIMEOUT = float(os.getenv("LIVE_DATA_TIMEOUT", "8"))
+CONFIG_ERROR = "The model provider is not configured correctly. Check the exported environment variables."
+RUNTIME_SETTINGS = load_runtime_settings()
+LIVE_DATA_TIMEOUT = RUNTIME_SETTINGS.live_data_timeout_seconds
 ARBEITNOW_BASE_URL = os.getenv("ARBEITNOW_BASE_URL", "https://www.arbeitnow.com/api/job-board-api")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
@@ -186,7 +186,7 @@ def search_live_web(query: str, *, topic: str = "general", max_results: int = 3)
             "q": query,
             "api_key": SERPAPI_API_KEY,
             "num": max_results,
-            "hl": "de",
+            "hl": "en",
         }
         if topic == "news":
             params["tbm"] = "nws"
@@ -231,7 +231,7 @@ def interesting_companies(
     profile: dict[str, Any],
     arbeitnow_jobs: list[tuple[int, dict[str, Any]]] | None = None,
 ) -> list[dict[str, str]]:
-    query = f'hiring companies Germany "{profile_query(profile)}"'
+    query = f"hiring companies Germany {profile_query(profile)}"
     results = search_live_web(query, max_results=3)
     if results:
         return [
@@ -257,7 +257,7 @@ def interesting_companies(
         companies.append(
             {
                 "name": company,
-                "why": item.get("title", "Passende Live-Stelle gefunden"),
+                "why": item.get("title", "Relevant live role found"),
                 "url": item.get("url", ""),
                 "source": "Arbeitnow",
             }
@@ -273,29 +273,26 @@ def interesting_jobs(
 ) -> list[dict[str, str]]:
     query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
     jobs: list[dict[str, str]] = []
-    try:
-        for score, item in (arbeitnow_jobs or []):
-            if score == 0:
-                break
-            if not isinstance(item, dict):
-                continue
-            title = item.get("title", "")
-            company = item.get("company_name", "")
-            location = item.get("location", "")
-            url = item.get("url", "")
-            if title:
-                jobs.append(
-                    {
-                        "title": title,
-                        "why": " · ".join(part for part in [company, location] if part) or "Live job from Arbeitnow",
-                        "url": url,
-                        "source": "Arbeitnow",
-                    }
-                )
-            if len(jobs) == 3:
-                break
-    except (OSError, urllib.error.URLError, json.JSONDecodeError):
-        jobs = []
+    for score, item in (arbeitnow_jobs or []):
+        if score == 0:
+            break
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title", "")
+        company = item.get("company_name", "")
+        location = item.get("location", "")
+        url = item.get("url", "")
+        if title:
+            jobs.append(
+                {
+                    "title": title,
+                    "why": " · ".join(part for part in [company, location] if part) or "Live job from Arbeitnow",
+                    "url": url,
+                    "source": "Arbeitnow",
+                }
+            )
+        if len(jobs) == 3:
+            break
     if jobs:
         return jobs
 
@@ -313,19 +310,19 @@ def interesting_jobs(
 
 
 def course_suggestions(profile: dict[str, Any]) -> list[dict[str, str]]:
-    query = f"AI course {profile_query(profile, max_skills=2)} Coursera edX DeepLearning.AI"
-    results = search_live_web(query, max_results=3)
-    if not results:
-        results = search_live_web("AI productivity course Coursera edX DeepLearning.AI", max_results=3)
+    result = match_courses(
+        profile.get("skills") or [],
+        language="English",
+        limit=3,
+    )
     return [
         {
-            "name": item.get("title") or result_domain(item.get("url", "")),
-            "why": item.get("snippet") or item.get("url") or "Course search result",
-            "url": item.get("url", ""),
-            "source": item.get("source", ""),
+            "name": item["course"]["title"],
+            "why": "; ".join(item.get("why", [])),
+            "url": item["course"]["url"],
+            "source": item["course"]["provider"],
         }
-        for item in results
-        if item.get("title") or item.get("url")
+        for item in result["recommendations"]
     ]
 
 
@@ -349,10 +346,7 @@ def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
         discovery["jobs"] = interesting_jobs(profile, arbeitnow_jobs)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["jobs"] = []
-    try:
-        discovery["courses"] = course_suggestions(profile)
-    except (OSError, urllib.error.URLError, json.JSONDecodeError):
-        discovery["courses"] = []
+    discovery["courses"] = course_suggestions(profile)
     return discovery
 
 
@@ -474,7 +468,7 @@ def sidebar_html(
     live_note = (
         "Live data: Arbeitnow + web search"
         if live_search_configured
-        else "Live data: Arbeitnow + public web search"
+        else "Live data: Arbeitnow; web search not configured"
     )
     pressure = "MEDIUM"
     pressure_color = "#e0c85b"
@@ -531,37 +525,9 @@ def sidebar_html(
     <div class="cn-kicker">COURSES</div>
     <h2>Course direction</h2>
     <div class="cn-discovery-list">{course_rows}</div>
-    <p class="cn-data-note">Temporary search fallback until the verified course catalog is merged</p>
+    <p class="cn-data-note">Matched from the verified local course catalog</p>
   </section>
 </aside>
-"""
-
-
-def app_shell_html(
-    profile: dict[str, Any],
-    left_html: str,
-    discovery: dict[str, Any] | None = None,
-    status: str = "▲ ADAPTING",
-) -> str:
-    sidebar = sidebar_html(profile, discovery)
-    pressure = re.search(r'data-pressure="([^"]+)"', sidebar)
-    pressure_color = re.search(r'data-pressure-color="([^"]+)"', sidebar)
-    pressure_label = pressure.group(1) if pressure else "MEDIUM"
-    pressure_color_value = pressure_color.group(1) if pressure_color else "#e0c85b"
-    return f"""
-<div class="cn-shell">
-  <div class="cn-topbar">
-    <div class="cn-brand"><div class="cn-logo">A</div><div>AI Career Navigator</div></div>
-    <div class="cn-status">
-      <span>STATUS <strong>{escape_html(status)}</strong></span>
-      <span>CHANGE PRESSURE <strong style="color:{pressure_color_value}">{escape_html(pressure_label)}</strong></span>
-    </div>
-  </div>
-  <div class="cn-grid">
-    {left_html}
-    {sidebar}
-  </div>
-</div>
 """
 
 
@@ -597,14 +563,11 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
 """
 
 
-def rating_icon(rating: str) -> str:
+def rating_label(rating: str) -> str:
     return {
         "green": "LOW",
         "yellow": "MEDIUM",
         "red": "HIGH",
-        "gruen": "LOW",
-        "gelb": "MEDIUM",
-        "rot": "HIGH",
     }.get(str(rating).lower(), "MEDIUM")
 
 
@@ -655,7 +618,7 @@ def verified_course_resources(
 
     for item in result["recommendations"]:
         course = item["course"]
-        matched_gap = item["matched_gaps"][0] if item["matched_gaps"] else "general"
+        matched_gap = item["matched_gap_labels"][0] if item["matched_gap_labels"] else "General"
         resource = resources_by_gap.setdefault(matched_gap, {"gap": matched_gap, "free": [], "paid": []})
         target = "free" if course["cost_type"] in {"free", "audit_free"} else "paid"
         resource[target].append(
@@ -686,8 +649,7 @@ def apply_verified_courses(
         time_budget=time_budget,
         adaptation=adaptation,
     )
-    if resources:
-        report_data["resources"] = resources
+    report_data["resources"] = resources
     report_data["course_fallbacks"] = fallbacks
     return report_data
 
@@ -698,7 +660,7 @@ def render_report(data: dict[str, Any]) -> str:
     lines += ["## 1. Where AI changes your work", ""]
     for item in data.get("exposure", []):
         lines.append(
-            f"- **{item.get('task', '')}** {rating_icon(item.get('rating', 'gelb'))}: {item.get('reasoning', '')}"
+            f"- **{item.get('task', '')}** {rating_label(item.get('rating', 'yellow'))}: {item.get('reasoning', '')}"
         )
     lines += ["", data.get("exposure_summary", ""), ""]
 
@@ -922,17 +884,8 @@ def refresh_discovery(profile: dict[str, Any]):
     return sidebar_html(profile, discovery), discovery
 
 
-def enforce_budget_rules(report_data: dict[str, Any], learning_budget: str) -> dict[str, Any]:
-    if learning_budget.startswith("0 EUR"):
-        for resource in report_data.get("resources", []):
-            if isinstance(resource, dict):
-                resource["paid"] = []
-    return report_data
-
-
 def create_report(
     profile: dict[str, Any],
-    discovery: dict[str, Any],
     adaptation: str,
     time_budget: str,
     learning_budget: str,
@@ -952,7 +905,6 @@ def create_report(
         }
         user_payload = json.dumps({"profile": profile, "interview": interview}, ensure_ascii=False, indent=2)
         result = call_json(PROMPT_2, f"Create the career workspace from this data:\n\n{user_payload}", 8000)
-        result = enforce_budget_rules(result, learning_budget)
         result = apply_verified_courses(
             result,
             learning_budget=learning_budget,
@@ -1003,7 +955,6 @@ def reset_app():
 
 
 CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 :root {
   --cn-bg: #070d0a;
   --cn-primary: #f4fff6;
@@ -1018,7 +969,7 @@ CSS = """
 .gradio-container {
   background: var(--cn-bg) !important;
   color: #eafbee !important;
-  font-family: Inter, system-ui, sans-serif !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
   min-height: 100vh !important;
   overflow-x: hidden !important;
   max-width: none !important;
@@ -1136,7 +1087,7 @@ footer,
   font-size: 13px;
 }
 .cn-status {
-  font: 500 11.5px JetBrains Mono, monospace;
+  font: 500 11.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
   letter-spacing: .05em;
   color: var(--cn-muted);
   display: flex;
@@ -1263,7 +1214,7 @@ footer,
   flex: 1.1;
 }
 .cn-kicker {
-  font: 500 10.5px JetBrains Mono, monospace;
+  font: 500 10.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
   letter-spacing: .08em;
   color: var(--cn-muted);
   text-transform: uppercase;
@@ -1280,7 +1231,7 @@ footer,
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font: 500 12px JetBrains Mono, monospace;
+  font: 500 12px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
   color: var(--cn-text);
 }
 .cn-discovery-card {
@@ -1314,7 +1265,7 @@ footer,
 }
 .cn-discovery-item small {
   color: var(--cn-soft);
-  font: 500 10px JetBrains Mono, monospace;
+  font: 500 10px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
 }
 .cn-discovery-item a {
   color: var(--cn-accent);
@@ -1325,7 +1276,7 @@ footer,
 }
 .cn-side-card .cn-data-note {
   margin: 2px 0 0;
-  font: 500 9.5px JetBrains Mono, monospace;
+  font: 500 9.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
   color: var(--cn-muted);
 }
 .cn-row {
@@ -1469,7 +1420,7 @@ button.primary {
 }
 """
 
-with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
+with gr.Blocks(title="AI Career Navigator") as demo:
     profile_state = gr.State({})
     discovery_state = gr.State({})
 
@@ -1539,7 +1490,7 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
     )
     report_button.click(
         fn=create_report,
-        inputs=[profile_state, discovery_state, adaptation, time_budget, learning_budget, trigger],
+        inputs=[profile_state, adaptation, time_budget, learning_budget, trigger],
         outputs=[interaction_panel, report_panel, report_markdown, download_button, interview_error],
         api_name=False,
         show_progress="full",
@@ -1574,4 +1525,9 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
 
 
 if __name__ == "__main__":
-    demo.queue(default_concurrency_limit=4).launch(server_name="0.0.0.0", server_port=7860, show_error=True)
+    demo.queue(default_concurrency_limit=4).launch(
+        server_name=RUNTIME_SETTINGS.server_name,
+        server_port=RUNTIME_SETTINGS.server_port,
+        show_error=True,
+        css=CSS,
+    )

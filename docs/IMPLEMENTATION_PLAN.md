@@ -24,36 +24,36 @@ and the framework redesign do not create competing backlogs.
 
 ### Framework-core gate
 
-- [ ] O1: verify provider default model IDs against current official documentation.
-- [ ] O5: remove the remaining German internal strings and defaults.
-- [ ] N6: remove `app_shell_html` rather than carrying dead rendering code forward.
-- [ ] N7: remove the unreachable exception handler from `interesting_jobs`.
-- [ ] N9: rename `rating_icon` and simplify model-response repair logging.
-- [ ] N11: remove the unused discovery input from strategy generation. Optional,
+- [x] O1: verify provider default model IDs against current official documentation.
+- [x] O5: remove the remaining German internal strings and defaults.
+- [x] N6: remove `app_shell_html` rather than carrying dead rendering code forward.
+- [x] N7: remove the unreachable exception handler from `interesting_jobs`.
+- [x] N9: rename `rating_icon` and simplify model-response repair logging.
+- [x] N11: remove the unused discovery input from strategy generation. Optional,
       noisy discovery data must not influence the core recommendation contract.
-- [ ] Move `css` from the deprecated Gradio `Blocks` constructor argument to
+- [x] Move `css` from the deprecated Gradio `Blocks` constructor argument to
       `launch()` while preserving test imports and the responsive layout.
 
 ### Course-integrity gate
 
-- [ ] N3: discard model-generated course names in all cases.
-- [ ] N4: preserve original skill-gap labels in course presentation.
-- [ ] N1: add numeric course costs and enforce non-zero budget constraints.
-- [ ] N1: treat "over X" as an uncapped budget tier.
-- [ ] N5: power the sidebar course area from the verified local catalog.
-- [ ] N10: verify every catalog URL and title before retaining `last_verified`.
+- [x] N3: discard model-generated course names in all cases.
+- [x] N4: preserve original skill-gap labels in course presentation.
+- [x] N1: add numeric course costs and enforce non-zero budget constraints.
+- [x] N1: treat "over X" as an uncapped budget tier.
+- [x] N5: power the sidebar course area from the verified local catalog.
+- [x] N10: verify every catalog URL and title before retaining `last_verified`.
 
 ### Experience and discovery gate
 
-- [ ] O2: remove the Google Fonts import and use a privacy-safe font stack.
-- [ ] O3: replace the over-constrained exact-phrase company query.
-- [ ] N8: accurately label or hide web discovery when no provider is configured.
+- [x] O2: remove the Google Fonts import and use a privacy-safe font stack.
+- [x] O3: replace the over-constrained exact-phrase company query.
+- [x] N8: accurately label or hide web discovery when no provider is configured.
 - [ ] O4: remove obsolete local empty agent directories where present.
 
 ### Documentation gate
 
-- [ ] N9: align the GLM model slug across the live-test guide and README.
-- [ ] N9: define one supported Python range across installation documentation.
+- [x] N9: align the GLM model slug across the live-test guide and README.
+- [x] N9: define one supported Python range across installation documentation.
 - [ ] Replace the long-report and generic roadmap assumptions in this plan with
       the persistent pathway-comparison workspace contract.
 
