@@ -983,13 +983,16 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
           </div>
         </div>
         <div class="cn-user">CV: {escape_html(source_label)}</div>
-        <div class="cn-assistant">
-          <strong>First observations</strong>
-          <ol>{teaser_items}</ol>
-        </div>
-        <div class="cn-assistant cn-question-list">
-          <strong>Questions to answer before discovery</strong>
-          <ol>{question_items}</ol>
+        <div class="cn-layer-stack">
+          <details class="cn-layer-panel">
+            <summary><span>Profile read</span><strong>First observations</strong></summary>
+            <ol>{teaser_items}</ol>
+          </details>
+          <details class="cn-layer-panel">
+            <summary><span>Answer below</span><strong>Questions to answer before discovery</strong></summary>
+            <ol>{question_items}</ol>
+          </details>
+          <div class="cn-next-step">Next: answer the short interview below. The app will propose perspectives before it searches roles, companies, or courses.</div>
         </div>
       </div>
     </section>
@@ -1738,7 +1741,7 @@ footer,
 }
 .workspace-shell {
   min-height: auto !important;
-  padding: 24px 0 40px !important;
+  padding: 18px 0 32px !important;
   align-content: start !important;
 }
 .cn-appbar {
@@ -2018,10 +2021,10 @@ footer,
 }
 .cn-chat-panel {
   border-radius: 20px;
-  padding: 36px;
+  padding: clamp(22px, 3vw, 30px);
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 18px;
   min-height: 0;
   position: relative;
   overflow: hidden;
@@ -2036,7 +2039,7 @@ footer,
   position: relative;
 }
 .cn-heading h1 {
-  font-size: 30px;
+  font-size: clamp(26px, 3vw, 30px);
   line-height: 1.2;
   font-weight: 700;
   margin: 0 0 8px;
@@ -2049,11 +2052,11 @@ footer,
 }
 .cn-messages {
   flex: 1;
-  min-height: 180px;
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 .cn-assistant {
   max-width: min(82%, 680px);
@@ -2064,6 +2067,45 @@ footer,
 .cn-assistant ol {
   margin: 8px 0 0 20px;
   padding: 0;
+}
+.cn-layer-stack {
+  display: grid;
+  gap: 10px;
+}
+.cn-layer-panel {
+  border: 1px solid var(--cn-line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+  padding: 10px 12px;
+}
+.cn-layer-panel summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cn-layer-panel summary span {
+  color: var(--cn-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.cn-layer-panel summary strong {
+  color: var(--cn-primary);
+  font-size: 13.5px;
+}
+.cn-layer-panel ol {
+  margin: 10px 0 2px 20px;
+  padding: 0;
+  color: var(--cn-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.cn-next-step {
+  color: var(--cn-soft);
+  font-size: 13px;
+  line-height: 1.45;
 }
 .cn-user {
   align-self: flex-end;

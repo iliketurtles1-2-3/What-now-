@@ -288,7 +288,10 @@ class AppCoreTests(unittest.TestCase):
             "Profile from your CV",
         )
 
+        self.assertIn('class="cn-layer-stack"', html)
+        self.assertIn("<details", html)
         self.assertIn("Questions to answer before discovery", html)
+        self.assertIn("Next: answer the short interview below", html)
         self.assertIn("founder support", html)
         self.assertIn("Cleantech", html)
 
