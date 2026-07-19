@@ -282,6 +282,133 @@ def render_teaser(teaser: list[str]) -> str:
     return f"## Erste Beobachtungen\n\n{bullets}"
 
 
+def escape_html(value: Any) -> str:
+    text = str(value or "")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def exposure_level_for_task(task: str) -> tuple[str, str]:
+    lower = task.lower()
+    high_terms = ["report", "analyse", "daten", "content", "text", "recherche", "dokument", "crm", "seo"]
+    low_terms = ["stakeholder", "führung", "strategie", "verhandlung", "beratung", "team", "kunden", "kommunikation"]
+    if any(term in lower for term in high_terms):
+        return ("hoch", "#e07a5b")
+    if any(term in lower for term in low_terms):
+        return ("niedrig", "#5be08a")
+    return ("mittel", "#e0c85b")
+
+
+def dashboard_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
+    role = escape_html(profile.get("current_role") or "Profil aus Lebenslauf")
+    industry = escape_html(profile.get("industry") or "Branche wird aus dem Profil abgeleitet")
+    years = profile.get("years_experience")
+    years_label = f"{years:g} Jahre" if isinstance(years, (int, float)) else "Erfahrung erkannt"
+    seniority = escape_html(profile.get("seniority") or "mid")
+    skills = [escape_html(skill) for skill in (profile.get("skills") or [])[:4]]
+    ai_signals = profile.get("ai_tool_signals") or []
+    roles = profile.get("roles") or []
+
+    task_candidates: list[str] = []
+    for item in roles:
+        for task in item.get("key_tasks", [])[:2]:
+            if task not in task_candidates:
+                task_candidates.append(task)
+    if not task_candidates:
+        task_candidates = list(profile.get("skills") or [])[:3]
+    task_rows = []
+    for task in task_candidates[:3]:
+        label, color = exposure_level_for_task(str(task))
+        task_rows.append(
+            f'<div class="cn-row"><span>{escape_html(task)}</span><span style="color:{color}">● {label}</span></div>'
+        )
+    while len(task_rows) < 3:
+        task_rows.append('<div class="cn-row cn-muted"><span>Weitere Aufgabe</span><span>— nach Report</span></div>')
+
+    teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
+    skill_line = " · ".join(skills) if skills else "Skills werden im Report priorisiert"
+    ai_line = "KI-Signale erkannt" if ai_signals else "Noch keine KI-Tool-Signale im CV"
+    pressure = "MEDIUM"
+    pressure_color = "#e0c85b"
+    if task_candidates:
+        levels = [exposure_level_for_task(str(task))[0] for task in task_candidates[:3]]
+        if levels.count("hoch") >= 2:
+            pressure, pressure_color = "HIGH", "#e07a5b"
+        elif levels.count("niedrig") >= 2:
+            pressure, pressure_color = "LOW", "#5be08a"
+
+    return f"""
+<div class="cn-shell">
+  <div class="cn-topbar">
+    <div class="cn-brand"><div class="cn-logo">A</div><div>AI Career Navigator</div></div>
+    <div class="cn-status">
+      <span>STATUS <strong>▲ ADAPTING</strong></span>
+      <span>CHANGE PRESSURE <strong style="color:{pressure_color}">{pressure}</strong></span>
+    </div>
+  </div>
+  <div class="cn-grid">
+    <section class="cn-chat-panel">
+      <div class="cn-accent"></div>
+      <div class="cn-heading">
+        <h1>Finde heraus, wo KI<br>deine Arbeit verändert.</h1>
+        <p>{role}, {industry} · {escape_html(years_label)} · {escape_html(source_label)}</p>
+      </div>
+      <div class="cn-messages">
+        <div class="cn-assistant">
+          Dein Lebenslauf ist geparst. Ich sehe jetzt dein Rollenprofil, erste Veränderungsfelder und die nächsten Entscheidungen, die deinen Report steuern.
+          <div class="cn-chips">
+            <span>Exponierung prüfen</span>
+            <span>100-Tage-Plan bauen</span>
+            <span>Narrativ schärfen</span>
+          </div>
+        </div>
+        <div class="cn-user">📄 {escape_html(source_label)}</div>
+        <div class="cn-assistant">
+          <strong>Erste Beobachtungen</strong>
+          <ol>{teaser_items}</ol>
+        </div>
+      </div>
+    </section>
+    <aside class="cn-sidebar">
+      <section class="cn-side-card cn-profile">
+        <div class="cn-kicker">PROFILE</div>
+        <h2>{role}</h2>
+        <p>{industry} · {seniority} · {escape_html(years_label)}</p>
+        <div class="cn-detail">{''.join(task_rows)}</div>
+      </section>
+      <section class="cn-side-card">
+        <div class="cn-kicker">LEARN</div>
+        <h2>100-Tage-Plan</h2>
+        <p>{escape_html(ai_line)} · Zeitbudget folgt im Interview</p>
+        <div class="cn-detail">
+          <div><span class="cn-ok">✓</span> Profil extrahiert</div>
+          <div><span class="cn-ok">✓</span> Veränderungsfelder markiert</div>
+          <div class="cn-muted">— Lernpfad nach deinen Antworten</div>
+        </div>
+      </section>
+      <section class="cn-side-card">
+        <div class="cn-kicker">POSITIONING</div>
+        <h2>Narrativ</h2>
+        <p>{skill_line}</p>
+        <div class="cn-detail">FOKUS <span class="cn-accent-text">CV-Bullets + LinkedIn Headline</span></div>
+      </section>
+      <section class="cn-side-card">
+        <div class="cn-kicker">NEXT ROLE</div>
+        <h2>Zielrichtung</h2>
+        <p>Wird aus Adaptionslevel, Zeitbudget und Budget abgeleitet</p>
+        <div class="cn-detail">TOP FIT <span class="cn-accent-text">nach Report-Erstellung</span></div>
+      </section>
+    </aside>
+  </div>
+</div>
+"""
+
+
 def rating_icon(rating: str) -> str:
     return {"gruen": "🟢", "gelb": "🟡", "rot": "🔴"}.get(str(rating).lower(), "🟡")
 
@@ -371,7 +498,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=False),
-            render_teaser(teaser),
+            dashboard_html(profile, teaser, "Profil aus deinem CV"),
             profile,
             "",
         )
@@ -449,33 +576,294 @@ def reset_app():
 
 
 CSS = """
-.container { max-width: 920px; margin: 0 auto; }
-.teaser { border-left: 4px solid #2563eb; padding: 1rem 1.2rem; background: #eff6ff; border-radius: 8px; }
-.privacy { color: #475569; font-size: 0.92rem; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+:root {
+  --cn-bg: #070d0a;
+  --cn-primary: #f4fff6;
+  --cn-text: #d6ede0;
+  --cn-soft: #9fc2ac;
+  --cn-muted: #7fa88f;
+  --cn-accent: #5be08a;
+  --cn-warn: #e0c85b;
+  --cn-alert: #e07a5b;
+  --cn-line: rgba(255,255,255,.09);
+}
+.gradio-container {
+  background: var(--cn-bg) !important;
+  color: #eafbee !important;
+  font-family: Inter, system-ui, sans-serif !important;
+}
+.container {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.upload-shell {
+  min-height: calc(100vh - 48px);
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
+}
+.upload-panel {
+  border: 1px solid var(--cn-line);
+  border-radius: 20px;
+  padding: 34px;
+}
+.upload-panel h1 {
+  color: var(--cn-primary);
+  font-size: 34px;
+  line-height: 1.12;
+  margin-bottom: 8px;
+}
+.upload-panel p, .privacy {
+  color: var(--cn-muted);
+  font-size: 13.5px;
+}
+.cn-shell {
+  min-height: 680px;
+  background: #070d0a;
+  background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
+  padding: 28px 0 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  color: #eafbee;
+}
+.cn-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cn-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.cn-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--cn-accent);
+  color: #07130c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.cn-status {
+  font: 500 11.5px JetBrains Mono, monospace;
+  letter-spacing: .05em;
+  color: var(--cn-muted);
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.cn-status strong, .cn-accent-text, .cn-ok {
+  color: var(--cn-accent);
+}
+.cn-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 22px;
+  flex: 1;
+  min-height: 0;
+}
+.cn-chat-panel, .cn-side-card, .interview-panel, .report-shell {
+  border: 1px solid var(--cn-line);
+  background: transparent;
+}
+.cn-chat-panel {
+  border-radius: 20px;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.cn-accent {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(135deg, transparent 46%, rgba(91,224,138,.05) 47%, transparent 48%);
+  pointer-events: none;
+}
+.cn-heading, .cn-messages {
+  position: relative;
+}
+.cn-heading h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--cn-primary);
+}
+.cn-heading p, .cn-side-card p {
+  margin: 0;
+  color: var(--cn-muted);
+  font-size: 13px;
+}
+.cn-messages {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cn-assistant {
+  max-width: 82%;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--cn-text);
+}
+.cn-assistant ol {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+.cn-user {
+  align-self: flex-end;
+  max-width: 70%;
+  background: rgba(255,255,255,.05);
+  border-radius: 14px;
+  padding: 10px 15px;
+  font-size: 13.5px;
+  color: #eafbee;
+}
+.cn-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.cn-chips span {
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12px;
+  color: #bcd9c7;
+}
+.cn-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+.cn-side-card {
+  border-radius: 18px;
+  padding: 22px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-height: 0;
+}
+.cn-profile {
+  flex: 1.1;
+}
+.cn-kicker {
+  font: 500 10.5px JetBrains Mono, monospace;
+  letter-spacing: .08em;
+  color: var(--cn-muted);
+  text-transform: uppercase;
+}
+.cn-side-card h2 {
+  margin: 0;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--cn-primary);
+}
+.cn-detail {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 500 12px JetBrains Mono, monospace;
+  color: var(--cn-text);
+}
+.cn-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cn-muted {
+  color: var(--cn-muted);
+}
+.interview-panel, .report-shell {
+  border-radius: 18px;
+  padding: 22px 24px;
+  margin-top: 18px;
+}
+.interview-panel h2 {
+  color: var(--cn-primary);
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+.interview-panel p {
+  color: var(--cn-soft);
+  margin: 0 0 18px;
+  font-size: 13px;
+}
+label, .wrap label {
+  color: var(--cn-soft) !important;
+}
+textarea, input {
+  color: #eafbee !important;
+}
+button.primary {
+  background: var(--cn-accent) !important;
+  color: #07130c !important;
+}
+.prose, .prose * {
+  color: var(--cn-text);
+}
+@media (max-width: 900px) {
+  .cn-grid {
+    grid-template-columns: 1fr;
+  }
+  .cn-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cn-chat-panel {
+    padding: 24px;
+  }
+}
 """
 
 with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
     profile_state = gr.State({})
 
-    with gr.Column(visible=True, elem_classes="container") as screen_upload:
-        gr.Markdown("# KI-Karriere-Check")
-        gr.Markdown("Lade deinen Lebenslauf hoch und erfahre, wie KI deinen Beruf verändert – und wie du dich jetzt positionierst.")
-        cv_file = gr.File(label="Lebenslauf als PDF hochladen", file_types=[".pdf"], file_count="single")
-        cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=10, placeholder="Mindestens 300 Zeichen ...")
-        start_button = gr.Button("Analyse starten", variant="primary")
-        gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
-        upload_error = gr.Markdown(visible=True)
+    with gr.Column(visible=True, elem_classes=["container", "upload-shell"]) as screen_upload:
+        with gr.Column(elem_classes="upload-panel"):
+            gr.Markdown("# KI-Karriere-Check")
+            gr.Markdown("Lade deinen Lebenslauf hoch und sieh, wo KI deine Arbeit verändert, welche Lücken wirklich zählen und wie du dich positionierst.")
+            cv_file = gr.File(label="Lebenslauf als PDF hochladen", file_types=[".pdf"], file_count="single")
+            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=10, placeholder="Mindestens 300 Zeichen ...")
+            start_button = gr.Button("Analyse starten", variant="primary")
+            gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
+            upload_error = gr.Markdown(visible=True)
 
     with gr.Column(visible=False, elem_classes="container") as screen_interview:
-        teaser_markdown = gr.Markdown(elem_classes="teaser")
-        adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
-        time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
-        learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
-        trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=3)
-        report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
-        interview_error = gr.Markdown()
+        teaser_markdown = gr.HTML()
+        with gr.Column(elem_classes="interview-panel"):
+            gr.Markdown("## Kurzinterview")
+            gr.Markdown("Vier Antworten reichen, damit der Report nicht generisch wird.")
+            with gr.Row():
+                adaptation = gr.Radio(ADAPTATION_OPTIONS, label="Adaptionslevel", interactive=True)
+                time_budget = gr.Radio(TIME_OPTIONS, label="Zeitbudget", interactive=True)
+            with gr.Row():
+                learning_budget = gr.Radio(BUDGET_OPTIONS, label="Lernbudget", interactive=True)
+                trigger = gr.Textbox(label="Auslöser", placeholder="Was hat dich heute hierher gebracht?", lines=4)
+            report_button = gr.Button("Vollständigen Report erstellen", variant="primary")
+            interview_error = gr.Markdown()
 
-    with gr.Column(visible=False, elem_classes="container") as screen_report:
+    with gr.Column(visible=False, elem_classes=["container", "report-shell"]) as screen_report:
         report_markdown = gr.Markdown()
         download_button = gr.DownloadButton("Report als Markdown herunterladen")
         reset_button = gr.Button("Neue Analyse")
