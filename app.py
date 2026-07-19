@@ -3,13 +3,11 @@ import json
 import os
 import re
 import tempfile
+import time
 import traceback
-import base64
-import html as html_lib
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -29,11 +27,15 @@ MODEL = os.getenv("LLM_MODEL", DEFAULT_MODELS.get(LLM_PROVIDER, "claude-sonnet-4
 MAX_PDF_BYTES = 10 * 1024 * 1024
 CV_ERROR = "I could not read the CV. Please upload a PDF or paste at least 300 characters of CV text."
 API_ERROR = "The analysis is not available right now. Please try again in a minute."
+CONFIG_ERROR = "Missing API key for the selected provider. Check your .env or environment variables."
+JSON_RESPONSE_ERROR = "The AI provider returned an invalid response. Please try again."
 LIVE_DATA_TIMEOUT = float(os.getenv("LIVE_DATA_TIMEOUT", "8"))
 ARBEITNOW_BASE_URL = os.getenv("ARBEITNOW_BASE_URL", "https://www.arbeitnow.com/api/job-board-api")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
 LIVE_SEARCH_PROVIDER = os.getenv("LIVE_SEARCH_PROVIDER", "tavily" if TAVILY_API_KEY else "serpapi").strip().lower()
+REPORT_DIR = Path(tempfile.gettempdir()) / "ai-career-navigator-reports"
+REPORT_MAX_AGE_SECONDS = 24 * 60 * 60
 
 ADAPTATION_OPTIONS = [
     "Optimize - I want to stay in my role and use AI better",
@@ -121,6 +123,10 @@ QUANTITY RULES:
 """.strip()
 
 
+class ConfigError(RuntimeError):
+    pass
+
+
 def strip_json_fences(text: str) -> str:
     clean = text.strip()
     clean = re.sub(r"^```(?:json)?\s*", "", clean, flags=re.IGNORECASE)
@@ -128,8 +134,40 @@ def strip_json_fences(text: str) -> str:
     return clean.strip()
 
 
+def extract_first_json_object(text: str) -> str:
+    clean = strip_json_fences(text)
+    if not clean:
+        return clean
+    start = clean.find("{")
+    if start == -1:
+        return clean
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(clean[start:], start=start):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return clean[start : index + 1]
+    return clean
+
+
 def parse_json_response(text: str) -> dict[str, Any]:
-    return json.loads(strip_json_fences(text))
+    return json.loads(extract_first_json_object(text))
 
 
 def extract_text_from_response(response: Any) -> str:
@@ -144,7 +182,7 @@ def anthropic_client() -> Any:
     from anthropic import Anthropic
 
     if not os.getenv("ANTHROPIC_API_KEY"):
-        raise RuntimeError("ANTHROPIC_API_KEY fehlt")
+        raise ConfigError("ANTHROPIC_API_KEY is missing for provider 'anthropic'.")
     return Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=120.0)
 
 
@@ -152,7 +190,7 @@ def openai_client() -> Any:
     from openai import OpenAI
 
     if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY fehlt")
+        raise ConfigError("OPENAI_API_KEY is missing for provider 'openai'.")
     kwargs = {"api_key": os.environ["OPENAI_API_KEY"], "timeout": 120.0}
     if os.getenv("OPENAI_BASE_URL"):
         kwargs["base_url"] = os.environ["OPENAI_BASE_URL"]
@@ -208,16 +246,23 @@ def call_model(system_prompt: str, user_content: Any, max_tokens: int) -> str:
 
 
 def call_json(system_prompt: str, user_content: Any, max_tokens: int) -> dict[str, Any]:
-    last_error = None
-    for _ in range(2):
+    first_response = call_model(system_prompt, user_content, max_tokens)
+    try:
+        return parse_json_response(first_response)
+    except json.JSONDecodeError as first_error:
+        repair_prompt = (
+            f"{system_prompt}\n\n"
+            "Your previous response was not valid JSON. Return only valid JSON matching the schema."
+        )
         try:
-            return parse_json_response(call_model(system_prompt, user_content, max_tokens))
-        except json.JSONDecodeError as exc:
-            last_error = exc
-            continue
+            return parse_json_response(call_model(repair_prompt, user_content, max_tokens))
+        except json.JSONDecodeError as repair_error:
+            raise ValueError(JSON_RESPONSE_ERROR) from repair_error
         except Exception:
             raise
-    raise ValueError(f"JSON konnte nicht gelesen werden: {last_error}")
+        finally:
+            if first_error:
+                print(f"Initial JSON parse failed: {first_error}")
 
 
 def file_path(uploaded_file: Any) -> str | None:
@@ -291,14 +336,6 @@ def profile_is_empty(profile: dict[str, Any]) -> bool:
         profile.get("education"),
     ]
     return sum(bool(field) for field in meaningful_fields) < 3
-
-
-def render_teaser(teaser: list[str]) -> str:
-    items = teaser[:3] if isinstance(teaser, list) else []
-    while len(items) < 3:
-        items.append("No observation available yet.")
-    bullets = "\n".join(f"{idx}. {item}" for idx, item in enumerate(items, start=1))
-    return f"## First Observations\n\n{bullets}"
 
 
 def escape_html(value: Any) -> str:
@@ -391,72 +428,7 @@ def search_live_web(query: str, *, topic: str = "general", max_results: int = 3)
             for item in (source_items or [])[:max_results]
             if isinstance(item, dict)
         ]
-    if topic == "news":
-        return search_google_news(query, max_results=max_results)
     return []
-
-
-def clean_search_url(url: str) -> str:
-    parsed = urllib.parse.urlparse(url)
-    query = urllib.parse.parse_qs(parsed.query)
-    if "uddg" in query and query["uddg"]:
-        return query["uddg"][0]
-    if parsed.scheme:
-        return url
-    if url.startswith("//"):
-        return f"https:{url}"
-    return url
-
-
-def strip_tags(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()
-
-
-def search_duckduckgo(query: str, *, max_results: int = 3) -> list[dict[str, str]]:
-    params = {"q": query, "kl": "de-de"}
-    url = f"https://duckduckgo.com/html/?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "text/html",
-            "User-Agent": "Mozilla/5.0 (compatible; ai-career-navigator/0.1)",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=LIVE_DATA_TIMEOUT) as response:
-        page = response.read().decode("utf-8", errors="replace")
-
-    results = []
-    blocks = re.findall(r'<div class="result(?: results_links)?[^"]*".*?</div>\s*</div>', page, flags=re.DOTALL)
-    for block in blocks:
-        link_match = re.search(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, flags=re.DOTALL)
-        if not link_match:
-            continue
-        snippet_match = re.search(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', block, flags=re.DOTALL)
-        title = html_lib.unescape(strip_tags(link_match.group(2)))
-        result_url = clean_search_url(html_lib.unescape(link_match.group(1)))
-        snippet = html_lib.unescape(strip_tags(snippet_match.group(1))) if snippet_match else result_domain(result_url)
-        if title and result_url:
-            results.append({"title": title, "url": result_url, "snippet": snippet, "source": "DuckDuckGo"})
-        if len(results) == max_results:
-            break
-    return results
-
-
-def search_google_news(query: str, *, max_results: int = 3) -> list[dict[str, str]]:
-    params = {"q": query, "hl": "de", "gl": "DE", "ceid": "DE:de"}
-    url = f"https://news.google.com/rss/search?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(url, headers={"User-Agent": "ai-career-navigator/0.1"})
-    with urllib.request.urlopen(request, timeout=LIVE_DATA_TIMEOUT) as response:
-        xml_text = response.read().decode("utf-8", errors="replace")
-    root = ET.fromstring(xml_text)
-    results = []
-    for item in root.findall("./channel/item")[:max_results]:
-        title = item.findtext("title") or ""
-        link = item.findtext("link") or ""
-        source = item.findtext("source") or "Google News"
-        if title and link:
-            results.append({"title": title, "url": link, "snippet": source, "source": "Google News"})
-    return results
 
 
 def ranked_arbeitnow_jobs(profile: dict[str, Any], *, limit: int = 50) -> list[tuple[int, dict[str, Any]]]:
@@ -481,7 +453,10 @@ def ranked_arbeitnow_jobs(profile: dict[str, Any], *, limit: int = 50) -> list[t
     return ranked_items
 
 
-def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
+def interesting_companies(
+    profile: dict[str, Any],
+    arbeitnow_jobs: list[tuple[int, dict[str, Any]]] | None = None,
+) -> list[dict[str, str]]:
     query = f'hiring companies Germany "{profile_query(profile)}"'
     results = search_live_web(query, max_results=3)
     if results:
@@ -498,7 +473,7 @@ def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
 
     companies = []
     seen = set()
-    for score, item in ranked_arbeitnow_jobs(profile):
+    for score, item in (arbeitnow_jobs or []):
         if score == 0:
             break
         company = item.get("company_name", "")
@@ -518,11 +493,14 @@ def interesting_companies(profile: dict[str, Any]) -> list[dict[str, str]]:
     return companies
 
 
-def interesting_jobs(profile: dict[str, Any]) -> list[dict[str, str]]:
+def interesting_jobs(
+    profile: dict[str, Any],
+    arbeitnow_jobs: list[tuple[int, dict[str, Any]]] | None = None,
+) -> list[dict[str, str]]:
     query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
     jobs: list[dict[str, str]] = []
     try:
-        for score, item in ranked_arbeitnow_jobs(profile):
+        for score, item in (arbeitnow_jobs or []):
             if score == 0:
                 break
             if not isinstance(item, dict):
@@ -582,14 +560,19 @@ def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
         "companies": [],
         "jobs": [],
         "courses": [],
-        "live_enabled": bool(TAVILY_API_KEY or SERPAPI_API_KEY or ARBEITNOW_BASE_URL),
     }
+    arbeitnow_jobs: list[tuple[int, dict[str, Any]]] = []
     try:
-        discovery["companies"] = interesting_companies(profile)
+        if ARBEITNOW_BASE_URL:
+            arbeitnow_jobs = ranked_arbeitnow_jobs(profile)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        arbeitnow_jobs = []
+    try:
+        discovery["companies"] = interesting_companies(profile, arbeitnow_jobs)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["companies"] = []
     try:
-        discovery["jobs"] = interesting_jobs(profile)
+        discovery["jobs"] = interesting_jobs(profile, arbeitnow_jobs)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["jobs"] = []
     try:
@@ -806,15 +789,6 @@ def app_shell_html(
   </div>
 </div>
 """
-
-
-def dashboard_html(
-    profile: dict[str, Any],
-    teaser: list[str],
-    source_label: str,
-    discovery: dict[str, Any] | None = None,
-) -> str:
-    return app_shell_html(profile, dashboard_left_html(profile, teaser, source_label), discovery)
 
 
 def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
@@ -1087,26 +1061,25 @@ def inline_markdown(text: str) -> str:
     return escaped
 
 
-def report_shell_html(profile: dict[str, Any], report: str, discovery: dict[str, Any] | None) -> str:
-    left_html = f"""
-    <section class="cn-chat-panel cn-report-panel">
-      <div class="cn-heading">
-        <h1>Your workspace</h1>
-        <p>The career report stays in the app, with courses and optional role context beside it.</p>
-      </div>
-      <article class="cn-report-content">
-        {markdown_to_basic_html(report)}
-      </article>
-    </section>
-"""
-    return app_shell_html(profile, left_html, discovery, status="✓ REPORT READY")
-
-
 def write_report_file(markdown: str) -> str:
-    handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".md", encoding="utf-8")
+    prune_report_files()
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".md", encoding="utf-8", dir=REPORT_DIR)
     with handle:
         handle.write(markdown)
     return handle.name
+
+
+def prune_report_files(max_age_seconds: int = REPORT_MAX_AGE_SECONDS) -> None:
+    if not REPORT_DIR.exists():
+        return
+    cutoff = time.time() - max_age_seconds
+    for path in REPORT_DIR.glob("*.md"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue
 
 
 def start_analysis(uploaded_file: Any, cv_text: str | None):
@@ -1139,6 +1112,19 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             {},
             {},
             str(exc) if str(exc) == CV_ERROR else API_ERROR,
+        )
+    except ConfigError as exc:
+        print(exc)
+        return (
+            gr.update(visible=True),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            "",
+            "",
+            {},
+            {},
+            CONFIG_ERROR,
         )
     except Exception:
         traceback.print_exc()
@@ -1211,6 +1197,9 @@ def create_report(
     except ValueError as exc:
         message = str(exc) if str(exc) != CV_ERROR else CV_ERROR
         return (gr.update(visible=True), gr.update(visible=False), "", None, message)
+    except ConfigError as exc:
+        print(exc)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, CONFIG_ERROR)
     except Exception:
         traceback.print_exc()
         return (gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)

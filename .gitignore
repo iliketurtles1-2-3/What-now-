@@ -1,0 +1,26 @@
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+.env
+.env.*
+
+*.zip
+
+# Local CVs, ad hoc uploads, and generated report artifacts.
+uploads/
+local_uploads/
+test_uploads/
+cv_uploads/
+tmp_uploads/
+reports/
+temp_reports/
+tmp_reports/
+*.local.pdf
+*.cv.pdf
+*_cv.pdf
+*_CV.pdf
+workspace-notes-*.md
+ai-career-navigator-reports/
