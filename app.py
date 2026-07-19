@@ -601,22 +601,36 @@ CSS = """
   background: var(--cn-bg) !important;
   color: #eafbee !important;
   font-family: Inter, system-ui, sans-serif !important;
+  min-height: 100vh !important;
+  overflow-x: hidden !important;
+}
+body {
+  overflow-x: hidden !important;
+}
+footer,
+.built-with,
+.gradio-container > div:last-child img,
+.gradio-container > div:last-child svg {
+  display: none !important;
 }
 .container {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
 }
 .upload-shell {
-  min-height: calc(100vh - 48px);
+  min-height: auto;
   display: grid;
   align-content: center;
   gap: 22px;
   background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
+  padding: 24px 0;
 }
 .upload-panel {
   border: 1px solid var(--cn-line);
   border-radius: 20px;
-  padding: 34px;
+  padding: 28px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
 }
 .upload-panel h1 {
   color: var(--cn-primary);
@@ -627,6 +641,21 @@ CSS = """
 .upload-panel p, .privacy {
   color: var(--cn-muted);
   font-size: 13.5px;
+}
+.upload-panel .file-preview,
+.upload-panel [data-testid="file-preview"],
+.upload-panel .upload-container,
+.upload-panel .dropzone,
+.upload-panel [class*="dropzone"] {
+  min-height: 140px !important;
+  max-height: 190px !important;
+}
+.upload-panel textarea {
+  min-height: 160px !important;
+  height: 180px !important;
+}
+.upload-panel button {
+  min-height: 42px !important;
 }
 .cn-shell {
   min-height: min(680px, calc(100vh - 48px));
@@ -833,6 +862,9 @@ label, .wrap label {
 textarea, input {
   color: #eafbee !important;
 }
+textarea {
+  resize: vertical !important;
+}
 button.primary {
   background: var(--cn-accent) !important;
   color: #07130c !important;
@@ -871,7 +903,8 @@ button.primary {
 }
 @media (max-width: 640px) {
   .upload-panel {
-    padding: 22px;
+    padding: 20px;
+    max-height: none;
   }
   .upload-panel h1,
   .cn-heading h1 {
@@ -898,7 +931,7 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
             gr.Markdown("# KI-Karriere-Check")
             gr.Markdown("Lade deinen Lebenslauf hoch und sieh, wo KI deine Arbeit verändert, welche Lücken wirklich zählen und wie du dich positionierst.")
             cv_file = gr.File(label="Lebenslauf als PDF hochladen", file_types=[".pdf"], file_count="single")
-            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=10, placeholder="Mindestens 300 Zeichen ...")
+            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=6, placeholder="Mindestens 300 Zeichen ...")
             start_button = gr.Button("Analyse starten", variant="primary")
             gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
