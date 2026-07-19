@@ -145,11 +145,11 @@ work later can't keep them apart, merge into `costs_and_risks[]` with a
   is the minimum replacement. Decide explicitly, don't lose it by accident.
 - `time_to_viability` — coarse horizon enum (weeks|months|year_plus).
   Tradeoffs are abstract without it.
-- `development_needs` must be structured to feed the existing course
-  matcher: `[{label, priority, evidence_id_of_gap}]` — `label`/`priority`
-  is exactly what `courses/matcher.py::normalize_gaps` consumes. Course
-  names never originate in the pathway (existing product law: catalog or
-  fallback search phrase only).
+- `development_needs` must be structured to feed learning research tasks:
+  `[{label, priority, evidence_id_of_gap, preferred_resource_types[]}]`.
+  Named resources and URLs never originate in the pathway; the model may
+  propose search intents, but concrete resources come from sourced research
+  results or user-provided links.
 
 **Field rules:**
 
@@ -205,8 +205,7 @@ references the profile; it does not restate it.
   fields. Extraction will be wrong; the contract must let the user fix it
   **before** pathway generation, and downstream objects must record which
   profile version they were generated from.
-- Saved courses linked to `development_needs` entries (docs already promise
-  save-to-plan).
+- Saved learning resources linked to `development_needs` entries.
 - `schema_version` on this and every persisted object.
 
 **Unnecessary:** derived presentation strings (rendered HTML, formatted
@@ -402,7 +401,7 @@ RecommendationSet. States the schema needs:
    time/budget/ambition combination. Names the binding constraint and what
    relaxation would unlock. Never emit fake pathways to avoid this state.
 4. `partial_set` — core pathways generated, optional enrichment
-   (discovery, courses) unavailable; enrichment absence flagged per
+   (discovery, learning resources) unavailable; enrichment absence flagged per
    section, core intact (extends the existing per-tile discovery
    degradation).
 5. `generation_invalid` — model output failed schema/evidence validation
@@ -411,15 +410,14 @@ RecommendationSet. States the schema needs:
 6. `provider_error` / `config_error` — exist today; keep distinct.
 7. Per-pathway `validation: passed|failed{rules[]}` — a set with one
    failed pathway can ship the passing ones rather than all-or-nothing.
-8. `development_need_unmatched` — no verified course fits a need; the
-   fallback search phrase is the representation (exists in matcher; must
-   be preserved per-need in the pathway, not set-globally).
+8. `development_need_unmatched` — no live learning result fits a need; the
+   queued search phrase is preserved per need, not set-globally.
 9. User-driven states in WorkspaceState: all pathways rejected (with
    reasons → regeneration input); experiment completed negative (pathway
    dropped, learning recorded); profile corrected after generation
    (downstream objects marked stale via profile version reference).
-10. `stale_data` flags — course `last_verified` older than a threshold;
-    market/environment claims carry generation timestamp.
+10. `stale_data` flags — sourced resources older than a threshold or not
+    recently checked; market/environment claims carry generation timestamp.
 
 ---
 
@@ -436,8 +434,8 @@ Schema/validation/state work — independent of any prompt wording:
    user-visible options) — replaces the `startswith("0 EUR")` pattern.
 4. CareerPathway additions: `id`, `title`, `kill_signals`,
    `experiment.tests_assumptions`, `constraint_fit`, `change_outlook`,
-   `time_to_viability`; `development_needs` shaped for
-   `courses/matcher.py::normalize_gaps`; disjoint definitions for
+   `time_to_viability`; `development_needs` shaped for learning research
+   tasks; disjoint definitions for
    tradeoffs vs reasons_against.
 5. RecommendationSet: cardinality/composition rules, `conflicts[]`,
    `rejected_pathways[]`, `sensitivity`, `best_if` per pathway (unranked),
@@ -449,7 +447,7 @@ Schema/validation/state work — independent of any prompt wording:
 7. InterviewAnswers: typed trigger interpretation; explicit-unknown
    constraint slots.
 8. WorkspaceState: pathway/experiment statuses with outcomes,
-   `profile_corrections` + provenance, saved-course links,
+   `profile_corrections` + provenance, saved-resource links,
    `schema_version` on all persisted objects.
 9. Code-enforceable anti-generic and safety rules from §2/§3: evidence
    quota, quote verification, diversity check, neutrality guard,

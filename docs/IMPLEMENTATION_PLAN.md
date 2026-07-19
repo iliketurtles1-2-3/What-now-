@@ -18,7 +18,7 @@ and the framework redesign do not create competing backlogs.
 ### Baseline gate
 
 - [x] N2: make every existing test discoverable with the standard library.
-- [x] N2: resolve the course-catalog path relative to the test file.
+- [x] N2: removed the obsolete course-catalog path from the active workflow.
 - [x] N2: add a minimal CI workflow for compilation and the complete test suite.
 - [x] Keep local `.claude/` and `.agents/` configuration out of the repository.
 
@@ -40,8 +40,8 @@ and the framework redesign do not create competing backlogs.
 - [x] N4: preserve original skill-gap labels in course presentation.
 - [x] N1: add numeric course costs and enforce non-zero budget constraints.
 - [x] N1: treat "over X" as an uncapped budget tier.
-- [x] N5: power the sidebar course area from the verified local catalog.
-- [x] N10: verify every catalog URL and title before retaining `last_verified`.
+- [x] N5: replace the sidebar course area with dynamic learning-resource research.
+- [x] N10: remove catalog URL verification; live resources are checked through research tasks.
 
 ### Experience and discovery gate
 
@@ -102,7 +102,7 @@ Acceptance:
 ### P2 — Define structured product schemas
 
 - [ ] Add typed schemas for profile, interview, assessment, plan, positioning, and
-      course recommendation.
+      learning research findings.
 - [ ] Separate model response validation from presentation rendering.
 - [ ] Add required-field and quantity validation.
 - [ ] Add one structured repair attempt for malformed model output.
@@ -135,7 +135,7 @@ Acceptance:
 - [ ] Render the roadmap as phases and checkable actions.
 - [ ] Render decision gates as explicit choices.
 - [ ] Render positioning assets in editable/copyable fields.
-- [ ] Add workspace navigation between overview, assessment, roadmap, courses, and
+- [ ] Add workspace navigation between overview, assessment, roadmap, learning, and
       positioning.
 - [ ] Remove the Markdown download as the primary completion action.
 - [ ] Add print-specific CSS for browser print-to-PDF.
@@ -146,24 +146,22 @@ Acceptance:
 - Users can scan, navigate, and act on individual recommendations.
 - Printing produces a readable report without application controls.
 
-### P5 — Build the course data layer
+### P5 — Build the learning research layer
 
-- [ ] Define the course catalog schema.
-- [ ] Create an initial catalog of 20–30 verified courses across the most likely
-      skill categories.
-- [ ] Record provider, URL, skills, level, format, cost, estimated time, language,
-      and verification date.
-- [ ] Build deterministic filtering by budget, time, language, and skill.
-- [ ] Add ranking based on the prioritized gaps.
-- [ ] Add a fallback search phrase when no verified course fits.
-- [ ] Add a save-to-plan action in the course interface.
+- [x] Delete the static course catalog and deterministic matcher.
+- [ ] Define learning research task and finding schemas.
+- [ ] Search across courses, YouTube, GitHub, books, events, communities, and practice projects.
+- [ ] Rank findings by profile fit, skill gap, time, budget, language, evidence quality, and freshness.
+- [ ] Show queued search phrases when Tavily or SerpAPI is not configured.
+- [ ] Add source freshness and domain indicators to learning cards.
+- [ ] Add a save-to-plan action in the learning interface.
 - [x] Remove recent market signals from the interface and code path.
 
 Acceptance:
 
-- Every displayed course exists and has a verified URL.
-- A zero budget yields only free-compatible options.
-- Recommendations explain their relationship to a specific skill gap.
+- Every displayed external resource has a source URL from live research.
+- A zero budget prioritizes free resources, open materials, communities, and projects.
+- Recommendations explain their relationship to a specific skill gap and direction.
 
 ### P6 — Improve the prompts with evaluation data
 
@@ -180,12 +178,12 @@ Acceptance:
 
 - Different CVs produce meaningfully different assessments.
 - Different interview answers produce meaningfully different roadmaps.
-- Recommendations do not invent experience, courses, or URLs.
+- Recommendations do not invent experience, named resources, or URLs.
 
 ### P7 — Make development actionable
 
 - [ ] Allow roadmap actions to be marked planned, active, or complete.
-- [ ] Allow a course to be attached to a roadmap phase.
+- [ ] Allow a learning resource or project to be attached to a roadmap phase.
 - [ ] Show current-session progress in the sidebar.
 - [ ] Add a next-action summary to the workspace overview.
 - [ ] Add a reset confirmation before deleting current-session work.
@@ -193,7 +191,7 @@ Acceptance:
 Acceptance:
 
 - The user has at least one clear next action after generating the strategy.
-- The workspace changes as actions and courses are selected.
+- The workspace changes as actions and learning resources are selected.
 
 ### P8 — Resilience and optional discovery
 
@@ -230,7 +228,7 @@ Score each dimension from 1 to 5:
 | Interview sensitivity | Do ambition, time, budget, and trigger change the plan? |
 | Actionability | Does the user know what to do next? |
 | Feasibility | Does the plan fit the stated time and budget? |
-| Course quality | Are courses real, relevant, current, and correctly linked? |
+| Learning quality | Are resources real, relevant, current, varied, and correctly linked? |
 | Positioning quality | Are the narrative and CV bullets credible and usable? |
 | Clarity | Can the result be understood without reading a long document? |
 | Trust | Are uncertainty and limitations communicated honestly? |
@@ -243,7 +241,7 @@ Target for user testing: no score below 3 and an average of at least 4.
 2. Convert language and define schemas.
 3. Build the compact entry screen.
 4. Replace Markdown rendering with the workspace views.
-5. Add the verified course catalog and matcher.
+5. Add the learning research layer.
 6. Evaluate and revise prompts using representative CVs.
 7. Add progress interactions.
 8. Harden optional discovery and deployment.

@@ -112,51 +112,17 @@ class AppCoreTests(unittest.TestCase):
         with patch.object(app, "call_model", fake_call_model):
             self.assertEqual(app.call_json("schema prompt", "payload", 100), {"ok": True})
 
-    def test_unverified_model_courses_are_removed_when_catalog_has_no_match(self):
-        report = {
-            "gaps": [{"gap": "Quantum portfolio optimization", "priority": 1}],
-            "resources": [
-                {
-                    "gap": "Quantum portfolio optimization",
-                    "free": [{"name": "Invented model course"}],
-                    "paid": [],
-                }
-            ],
-        }
-
-        result = app.apply_verified_courses(
-            report,
-            learning_budget="0 EUR (free only)",
-            time_budget="< 2 hours/week",
-            adaptation="Optimize - I want to stay in my role and use AI better",
-        )
-
-        self.assertEqual(result["resources"], [])
-        self.assertEqual(
-            result["course_fallbacks"][0]["gap"],
-            "Quantum portfolio optimization",
-        )
-
-    def test_verified_course_resources_keep_original_gap_label(self):
-        resources, _ = app.verified_course_resources(
-            [{"gap": "Prompt Engineering", "priority": 1}],
-            learning_budget="0 EUR (free only)",
-            time_budget="2-5 hours/week",
-            adaptation="Optimize - I want to stay in my role and use AI better",
-        )
-
-        self.assertTrue(resources)
-        self.assertEqual(resources[0]["gap"], "Prompt Engineering")
-
-    def test_sidebar_courses_use_catalog_and_discovery_note_is_honest(self):
-        suggestions = app.course_suggestions(
+    def test_learning_resources_are_search_tasks_without_catalog(self):
+        suggestions = app.learning_resource_suggestions(
             {"skills": ["prompt engineering"], "current_role": "Coordinator"}
         )
 
         self.assertTrue(suggestions)
-        self.assertTrue(all(item["url"].startswith("https://") for item in suggestions))
+        self.assertTrue(any("YouTube" in item["name"] for item in suggestions))
+        self.assertTrue(any("GitHub" in item["name"] for item in suggestions))
+        self.assertTrue(all(item["source"] == "Queued" for item in suggestions))
         sidebar = app.sidebar_html({"current_role": "Coordinator", "skills": []}, {})
-        self.assertIn("verified local course catalog", sidebar)
+        self.assertIn("Dynamic search across courses, YouTube, GitHub, books, events, and communities", sidebar)
         if not (app.TAVILY_API_KEY or app.SERPAPI_API_KEY):
             self.assertIn("web search not configured", sidebar)
 
@@ -189,6 +155,7 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("Climate partnerships operator", sidebar)
         self.assertIn("Companies to inspect", sidebar)
         self.assertIn("Specific openings", sidebar)
+        self.assertIn("Resource search", sidebar)
         self.assertIn("Rooms to enter", sidebar)
         self.assertIn("People to learn from", sidebar)
         self.assertIn("Reading path", sidebar)

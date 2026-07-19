@@ -7,7 +7,7 @@ career development.
 
 The product is being redesigned as an English, in-app career workspace. Users
 upload or paste a CV, receive an evidence-based assessment, answer four fixed
-questions, and build a development plan with verified courses and practical
+questions, and build a development plan with live learning research and practical
 milestones.
 
 Product and implementation documentation:
@@ -109,7 +109,7 @@ The sidebar tiles use live data at runtime:
 
 - Jobs: Arbeitnow job board API by default (`ARBEITNOW_BASE_URL`)
 - Companies: Tavily or SerpAPI web search
-- Courses: deterministic matching against the verified local catalog
+- Learning resources: Tavily or SerpAPI searches across courses, YouTube, GitHub, books, events, communities, and practice projects
 
 Configure one search provider for full live tiles:
 
@@ -124,7 +124,7 @@ export SERPAPI_API_KEY=your_serpapi_key_here
 export LIVE_SEARCH_PROVIDER=serpapi
 ```
 
-Without Tavily or SerpAPI, the app still tries live jobs from Arbeitnow, but company and recent-news tiles show a configuration note instead of AI-invented results.
+Without Tavily or SerpAPI, the app still tries live jobs from Arbeitnow, but company and learning-resource tiles show queued search tasks instead of AI-invented links.
 
 The app binds to `0.0.0.0:7860` by default. Override the binding with
 `GRADIO_SERVER_NAME` and `GRADIO_SERVER_PORT`. Open:

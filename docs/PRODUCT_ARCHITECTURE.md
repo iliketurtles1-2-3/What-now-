@@ -9,7 +9,7 @@ development workspace. The user should leave with:
 
 1. A clear assessment of how AI may change their current work.
 2. A development direction that fits their ambition, time, and budget.
-3. A concrete plan containing skills, courses, projects, and milestones.
+3. A concrete plan containing skills, learning resources, projects, and milestones.
 4. A workspace they can use inside the app instead of a document they must manage
    elsewhere.
 
@@ -38,9 +38,9 @@ flowchart TD
     H --> J[Development plan]
     H --> K[Positioning]
 
-    E --> L[Course matching]
+    E --> L[Learning research tasks]
     J --> L
-    L --> M[Curated course catalog]
+    L --> M[Live resource discovery]
 
     I --> N[In-app career workspace]
     J --> N
@@ -49,7 +49,7 @@ flowchart TD
 
     N --> O[Assessment view]
     N --> P[Development roadmap]
-    N --> Q[Courses and resources]
+    N --> Q[Learning resources]
     N --> R[CV and positioning]
     N --> S[Progress tracking]
 ```
@@ -121,43 +121,33 @@ The roadmap is the main forward-looking area of the product:
 For the prototype, progress exists in the current Gradio session. Persisted progress
 is a later feature requiring a deliberate storage and privacy decision.
 
-### 6. Courses and resources
+### 6. Learning resources
 
-Courses replace recent market signals.
+Learning resources replace recent market signals.
 
-Course recommendations must be grounded in a curated catalog rather than generated
-from model memory. Each catalog entry should contain:
+The product must not rely on a static course catalog. There are too many viable
+courses, videos, repositories, communities, books, events, and practice paths to
+capture manually. The model may propose search intents and learning actions, but
+concrete named resources and URLs should come from a research layer.
 
-```json
-{
-  "id": "provider-course-slug",
-  "title": "Verified course title",
-  "provider": "Provider name",
-  "url": "https://...",
-  "skills": ["skill-a", "skill-b"],
-  "level": "beginner",
-  "format": "course",
-  "cost_type": "free",
-  "cost_note": "Free audit available",
-  "cost_eur": 0,
-  "time_hours": 8,
-  "language": "English",
-  "last_verified": "YYYY-MM-DD"
-}
-```
+Research should cover:
 
-The model identifies skill gaps. Application code then filters the catalog by skill,
-budget, available time, level, and language. The model may rank or explain suitable
-results, but it must never invent a course or URL.
+- Courses and workshops.
+- YouTube lectures and full-course playlists.
+- GitHub repositories, templates, and examples.
+- Books and practitioner guides.
+- Events, meetups, conferences, and webinars.
+- Communities, newsletters, podcasts, and people to interview.
+- Side projects and on-the-job experiments.
 
-The course area should show:
+The learning area should show:
 
-- Why the course matches the user.
+- Why the resource or action matches the user.
 - Which gap it addresses.
-- Time and cost.
-- Provider and verified external link.
+- Time, cost, and format where available.
+- Source link for live results.
 - A save-to-plan action.
-- A clear fallback search phrase when no verified match exists.
+- A clear queued search phrase when live search is not configured.
 
 ### 7. Positioning
 
@@ -178,10 +168,10 @@ between:
 - Overview
 - Assessment
 - Roadmap
-- Courses
+- Learning
 - Positioning
 
-The right sidebar may show profile, plan progress, saved courses, companies, and
+The right sidebar may show profile, plan progress, saved learning resources, companies, and
 relevant jobs. Companies and jobs are optional enrichment; they must not block the
 core workflow.
 
@@ -194,9 +184,9 @@ flowchart LR
     Profile --> Strategy
     Profile --> Gaps[Skill gaps]
     Strategy --> Gaps
-    Catalog[Verified course catalog] --> Matcher[Deterministic course matcher]
-    Gaps --> Matcher
-    Matcher --> Recommendations[Course recommendations]
+    Gaps --> Research[Learning research tasks]
+    Strategy --> Research
+    Research --> Recommendations[Sourced learning findings]
     Strategy --> Workspace[Career workspace state]
     Recommendations --> Workspace
 ```
@@ -208,8 +198,8 @@ The primary internal objects are:
 - `CareerAssessment`
 - `DevelopmentPlan`
 - `PositioningAssets`
-- `Course`
-- `CourseRecommendation`
+- `LearningResearchTask`
+- `LearningFinding`
 - `WorkspaceState`
 
 Structured JSON is the interchange format between model calls and application code.
@@ -224,7 +214,7 @@ The application should render structured data through native UI components:
 - Task assessment rows with status indicators.
 - Gap cards with evidence and priority.
 - Roadmap phases with checkable actions.
-- Course rows with metadata and save actions.
+- Learning-resource rows with metadata and save actions.
 - Editable positioning fields.
 
 The initial export options should be:
@@ -252,10 +242,7 @@ providers/
 prompts/
   profile.py              Profile extraction prompt
   strategy.py             Career strategy prompt
-courses/
-  catalog.json            Verified course records
-  matcher.py              Deterministic filtering and ranking
-discovery.py              Optional companies and jobs
+discovery.py              Optional companies, jobs, learning resources, people, and events
 workspace.py              State transitions and validation
 ui/
   layout.py               Gradio application structure
@@ -277,7 +264,7 @@ The split should be introduced incrementally after the current uncommitted
 - Live enrichment is loaded separately and never delays the assessment.
 - Model output is validated against typed schemas.
 - One controlled repair attempt is allowed for invalid structured output.
-- Course names and URLs come only from verified catalog data.
+- Named resources and URLs come only from live research results or user-provided sources.
 - Budget and time constraints are enforced in application code.
 - CV claims must include evidence or be labeled as uncertain.
 - Provider-specific behavior remains behind the model interface.
@@ -290,7 +277,7 @@ The split should be introduced incrementally after the current uncommitted
 - English end-to-end workflow.
 - CV analysis and fixed interview.
 - Structured in-app assessment and roadmap.
-- Small verified course catalog.
+- Dynamic learning-resource search tasks.
 - Session-based progress.
 - Optional companies and jobs.
 
@@ -298,7 +285,7 @@ The split should be introduced incrementally after the current uncommitted
 
 - Evaluation across representative CV types.
 - Improved evidence grounding and prompt sensitivity.
-- Course save-to-plan workflow.
+- Learning-resource save-to-plan workflow.
 - Responsive and accessible interface.
 - Print-friendly report view.
 
@@ -306,7 +293,7 @@ The split should be introduced incrementally after the current uncommitted
 
 - Explicit opt-in persistence.
 - User accounts and cross-session progress.
-- Course catalog administration and scheduled verification.
+- Deeper research tasks with source freshness and relevance scoring.
 - Re-analysis after completing milestones.
 - Comparison between original and updated CV.
 - Feedback and outcome measurement.

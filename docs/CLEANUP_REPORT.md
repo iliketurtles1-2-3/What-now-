@@ -1,5 +1,11 @@
 # Cleanup & Issues Report v2 — AI Career Navigator
 
+Status update: the static course catalog direction is superseded. The active
+architecture now uses dynamic learning research tasks across courses, YouTube,
+GitHub, books, events, communities, and practice projects. Historical catalog
+findings below explain earlier implementation risk but are no longer the target
+product design.
+
 Re-audit date: 2026-07-19 (second pass). Scope: full re-review of `app.py`,
 `courses/matcher.py`, `courses/catalog.json`, `tests/`, `.gitignore`, `README.md`,
 and `docs/` at commit `a947325`. Supersedes the v1 report from earlier today.

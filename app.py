@@ -13,7 +13,6 @@ from typing import Any
 import gradio as gr
 
 from config import ConfigError, load_runtime_settings, load_settings
-from courses.matcher import match_courses
 from llm import call_json as llm_call_json
 from llm import call_model as llm_call_model
 from llm import parse_json_response
@@ -375,24 +374,90 @@ def interesting_jobs(
     ]
 
 
-def course_suggestions(profile: dict[str, Any], strategy: dict[str, Any] | None = None) -> list[dict[str, str]]:
-    targets: Any = profile.get("skills") or []
-    if isinstance(strategy, dict) and strategy.get("gaps"):
-        targets = strategy.get("gaps")
-    result = match_courses(
-        targets,
-        language="English",
-        limit=3,
-    )
+def gap_terms(strategy: dict[str, Any] | None) -> list[str]:
+    if not isinstance(strategy, dict):
+        return []
+    terms: list[str] = []
+    for gap in strategy.get("gaps", [])[:4]:
+        if isinstance(gap, dict):
+            value = str(gap.get("gap") or "").strip()
+            if value:
+                terms.append(value)
+    return terms
+
+
+def learning_resource_queries(
+    profile: dict[str, Any],
+    strategy: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
+    context = workspace_search_context(profile, strategy=strategy)
+    gaps = ", ".join(gap_terms(strategy)) or ", ".join(str(skill) for skill in (profile.get("skills") or [])[:4])
+    basis = " ".join(part for part in [context, gaps] if part).strip() or "career skill development"
     return [
         {
-            "name": item["course"]["title"],
-            "why": "; ".join(item.get("why", [])),
-            "url": item["course"]["url"],
-            "source": item["course"]["provider"],
-        }
-        for item in result["recommendations"]
+            "kind": "Course",
+            "query": f"{basis} course tutorial workshop certification practical",
+            "why": "Structured learning for the strongest skill gaps.",
+        },
+        {
+            "kind": "YouTube",
+            "query": f"site:youtube.com {basis} full course lecture tutorial",
+            "why": "Free video explanations and walkthroughs.",
+        },
+        {
+            "kind": "GitHub",
+            "query": f"site:github.com {basis} project examples templates",
+            "why": "Public examples, templates, and proof-project references.",
+        },
+        {
+            "kind": "Book",
+            "query": f"best books {basis} practitioner guide",
+            "why": "Deeper domain judgment beyond courses.",
+        },
+        {
+            "kind": "Event",
+            "query": f"events meetups conferences webinar {basis} Germany Europe online",
+            "why": "Rooms where the user can meet practitioners.",
+        },
+        {
+            "kind": "Community",
+            "query": f"communities forums newsletters practitioners {basis}",
+            "why": "People, examples, and informal market knowledge.",
+        },
     ]
+
+
+def learning_resource_suggestions(
+    profile: dict[str, Any],
+    strategy: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
+    queries = learning_resource_queries(profile, strategy)
+    if not (TAVILY_API_KEY or SERPAPI_API_KEY):
+        return [
+            {
+                "name": item["kind"],
+                "why": f'Search task: {item["query"]}',
+                "url": "",
+                "source": "Queued",
+            }
+            for item in queries[:4]
+        ]
+
+    findings: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+    for item in queries:
+        for result in live_resource_search(item["query"], item["kind"])[:2]:
+            url = result.get("url", "")
+            if url and url in seen_urls:
+                continue
+            if url:
+                seen_urls.add(url)
+            result["source"] = result.get("source") or item["kind"]
+            result["why"] = result.get("why") or item["why"]
+            findings.append(result)
+            if len(findings) >= 8:
+                return findings
+    return findings
 
 
 def project_suggestions(profile: dict[str, Any], strategy: dict[str, Any] | None = None) -> list[dict[str, str]]:
@@ -483,8 +548,8 @@ def build_research_tasks(
                     "perspective": name,
                     "area": "Learning",
                     "question": "What concrete learning moves close the highest-value gaps?",
-                    "evidence_target": "Course, book, event, or practice path with time and fit.",
-                    "query": f"best courses books events for {basis} career skills",
+                    "evidence_target": "Course, YouTube course, GitHub example, book, event, community, or practice path with time and fit.",
+                    "query": f"courses YouTube GitHub books events communities for {basis} career skills",
                     "source_type": "learning",
                 },
                 {
@@ -518,10 +583,7 @@ def task_findings(
     if source_type == "project":
         return project_suggestions(profile, strategy)[:2]
     if source_type == "learning":
-        findings = course_suggestions(profile, strategy)[:2]
-        if TAVILY_API_KEY or SERPAPI_API_KEY:
-            findings.extend(live_resource_search(query, "Learning resource")[:2])
-        return findings[:3]
+        return learning_resource_suggestions(profile, strategy)[:4]
     if not (TAVILY_API_KEY or SERPAPI_API_KEY):
         return []
     return live_resource_search(query, str(task.get("area") or "Research"))[:3]
@@ -641,7 +703,7 @@ def live_discovery(
         discovery["books"] = live_resource_search(f"best books for {context_query} career skill development", "Book")
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["books"] = []
-    discovery["courses"] = course_suggestions(profile, strategy)
+    discovery["courses"] = learning_resource_suggestions(profile, strategy)
     discovery["projects"] = project_suggestions(profile, strategy)
     return discovery
 
@@ -778,7 +840,7 @@ def pending_sidebar_html(profile: dict[str, Any]) -> str:
   <section class="cn-side-card">
     <div class="cn-kicker">SEARCH PAUSED</div>
     <h2>Pick a perspective first</h2>
-    <p>Jobs, companies, courses, events, people, books, and project ideas unlock after your answers create a real target direction.</p>
+    <p>Jobs, companies, learning resources, events, people, books, and project ideas unlock after your answers create a real target direction.</p>
     <div class="cn-detail">
       <div>NEEDED <span class="cn-accent-text">expectations</span></div>
       <div>NEEDED <span class="cn-accent-text">constraints</span></div>
@@ -827,11 +889,11 @@ def sidebar_html(
     job_rows = discovery_rows(
         discovery.get("jobs"), "title", "why", "Added after analysis"
     )
-    course_rows = discovery_rows(
+    learning_rows = discovery_rows(
         discovery.get("courses"),
         "name",
         "why",
-        "Course matches will update after skills and gaps are known",
+        "Learning research updates after skills and gaps are known",
     )
     event_rows = named_discovery_rows(discovery.get("events"), "Add Tavily to find relevant events")
     people_rows = named_discovery_rows(discovery.get("people"), "Add Tavily to find people and communities")
@@ -905,10 +967,10 @@ def sidebar_html(
     <p class="cn-data-note">Updated from current profile, answers, and generated gaps</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
-    <div class="cn-kicker">COURSES</div>
-    <h2>Skill courses</h2>
-    <div class="cn-discovery-list">{course_rows}</div>
-    <p class="cn-data-note">Matched from the verified local course catalog: skills first, then gaps</p>
+    <div class="cn-kicker">LEARNING</div>
+    <h2>Resource search</h2>
+    <div class="cn-discovery-list">{learning_rows}</div>
+    <p class="cn-data-note">Dynamic search across courses, YouTube, GitHub, books, events, and communities</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">PROJECTS</div>
@@ -1094,89 +1156,6 @@ def rating_label(rating: str) -> str:
         "yellow": "MEDIUM",
         "red": "HIGH",
     }.get(str(rating).lower(), "MEDIUM")
-
-
-def time_budget_to_hours(time_budget: str | None) -> float | None:
-    if not time_budget:
-        return None
-    if time_budget.startswith("< 2"):
-        return 8
-    if time_budget.startswith("2-5"):
-        return 20
-    if time_budget.startswith("5-10"):
-        return 40
-    if time_budget.startswith("> 10"):
-        return 80
-    return None
-
-
-def adaptation_to_course_level(adaptation: str | None) -> str | None:
-    if not adaptation:
-        return None
-    if adaptation.startswith("Optimize"):
-        return "beginner"
-    if adaptation.startswith("Develop"):
-        return "intermediate"
-    if adaptation.startswith("Reinvent"):
-        return "advanced"
-    return None
-
-
-def verified_course_resources(
-    gaps: list[dict[str, Any]],
-    *,
-    learning_budget: str,
-    time_budget: str,
-    adaptation: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    if not gaps:
-        return [], []
-
-    result = match_courses(
-        gaps,
-        budget=learning_budget,
-        time_hours=time_budget_to_hours(time_budget),
-        level=adaptation_to_course_level(adaptation),
-        limit=6,
-    )
-    resources_by_gap: dict[str, dict[str, Any]] = {}
-
-    for item in result["recommendations"]:
-        course = item["course"]
-        matched_gap = item["matched_gap_labels"][0] if item["matched_gap_labels"] else "General"
-        resource = resources_by_gap.setdefault(matched_gap, {"gap": matched_gap, "free": [], "paid": []})
-        target = "free" if course["cost_type"] in {"free", "audit_free"} else "paid"
-        resource[target].append(
-            {
-                "name": course["title"],
-                "provider": course["provider"],
-                "url": course["url"],
-                "format": course["format"].replace("_", " ").title(),
-                "time_cost": f'{course["time_hours"]:g} hours',
-                "cost_estimate": course["cost_note"],
-                "why": "; ".join(item.get("why", [])),
-            }
-        )
-
-    return list(resources_by_gap.values()), result["fallbacks"]
-
-
-def apply_verified_courses(
-    report_data: dict[str, Any],
-    *,
-    learning_budget: str,
-    time_budget: str,
-    adaptation: str,
-) -> dict[str, Any]:
-    resources, fallbacks = verified_course_resources(
-        report_data.get("gaps", []),
-        learning_budget=learning_budget,
-        time_budget=time_budget,
-        adaptation=adaptation,
-    )
-    report_data["resources"] = resources
-    report_data["course_fallbacks"] = fallbacks
-    return report_data
 
 
 def render_report(data: dict[str, Any]) -> str:
@@ -1463,7 +1442,7 @@ def render_workspace_html(data: dict[str, Any]) -> str:
     <label role="tab" for="cn-tab-gaps">Gaps</label>
     <label role="tab" for="cn-tab-plan">Plan</label>
     <label role="tab" for="cn-tab-roadmap">Roadmap</label>
-    <label role="tab" for="cn-tab-courses">Courses</label>
+    <label role="tab" for="cn-tab-courses">Learning</label>
     <label role="tab" for="cn-tab-narrative">Narrative</label>
     <label role="tab" for="cn-tab-feedback">Feedback</label>
   </div>
@@ -1490,7 +1469,7 @@ def render_workspace_html(data: dict[str, Any]) -> str:
       <div class="cn-card-grid">{roadmap_html(data.get("plan_365"), data.get("decision_gates"))}</div>
     </section>
     <section id="courses" class="cn-tab-panel cn-tab-courses-panel cn-work-section cn-window">
-      <div class="cn-window-bar"><span>05</span><h2>Courses and resources</h2></div>
+      <div class="cn-window-bar"><span>05</span><h2>Learning resources</h2></div>
       <div class="cn-stack">{course_cards_html(data.get("resources"), data.get("course_fallbacks"))}</div>
     </section>
     <section id="narrative" class="cn-tab-panel cn-tab-narrative-panel cn-work-section cn-window">
@@ -1700,12 +1679,6 @@ def create_report(
         }
         user_payload = json.dumps({"profile": profile, "interview": interview}, ensure_ascii=False, indent=2)
         result = call_json(PROMPT_2, f"Create the career workspace from this data:\n\n{user_payload}", 8000)
-        result = apply_verified_courses(
-            result,
-            learning_budget=learning_budget,
-            time_budget=time_budget,
-            adaptation=adaptation,
-        )
         discovery = live_discovery(profile, interview, result)
         report = render_report(result)
         download_path = write_report_file(report)

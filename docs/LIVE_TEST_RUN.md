@@ -81,7 +81,7 @@ http://localhost:7860
 
 5. Final workspace
    - Report stays in the app.
-   - Courses are real catalog courses with clickable links.
+   - Learning resources come from live research or show queued search tasks when search is not configured.
    - If budget is `0 EUR`, paid courses should not appear.
    - The 100-day plan ends in concrete artifacts.
    - CV bullets and LinkedIn headline are specific to the profile.
