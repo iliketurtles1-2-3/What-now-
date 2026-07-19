@@ -991,7 +991,7 @@ footer,
 .gradio-container [class*="floating"] {
   display: none !important;
 }
-.container {
+.cn-container {
   width: min(1180px, calc(100vw - 32px)) !important;
   max-width: calc(100vw - 32px) !important;
   margin: 0 auto !important;
@@ -1004,19 +1004,19 @@ footer,
   align-content: start !important;
 }
 .upload-shell {
-  min-height: min(620px, calc(100vh - 24px));
+  min-height: auto;
   display: grid;
-  align-content: center;
+  align-content: start;
   gap: 22px;
   background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
-  padding: 24px 0;
+  padding: clamp(24px, 6vh, 56px) 0 32px;
 }
 .upload-panel {
   border: 1px solid var(--cn-line);
   border-radius: 16px;
   padding: 28px;
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 .upload-panel h1 {
   color: var(--cn-primary);
@@ -1037,7 +1037,21 @@ footer,
   align-items: stretch !important;
   gap: 10px !important;
 }
+.composer-row > .form,
+.composer-input,
+.composer-input .wrap,
+.composer-input label,
+.composer-input .input-container {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.composer-input label > span {
+  display: none !important;
+}
 .composer-input textarea {
+  width: 100% !important;
+  max-width: 100% !important;
   min-height: 48px !important;
   height: 48px !important;
   max-height: 120px !important;
@@ -1366,7 +1380,7 @@ button.primary {
   color: var(--cn-text);
 }
 @media (max-width: 900px) {
-  .container {
+  .cn-container {
     width: min(100%, calc(100vw - 20px));
   }
   .cn-grid {
@@ -1399,9 +1413,17 @@ button.primary {
   }
 }
 @media (max-width: 640px) {
-.upload-panel {
+  .upload-panel {
     padding: 20px;
     max-height: none;
+  }
+  .composer-row {
+    grid-template-columns: 1fr !important;
+  }
+  .composer-upload,
+  .composer-upload button,
+  .composer-row button {
+    width: 100% !important;
   }
   .upload-panel h1,
   .cn-heading h1 {
@@ -1424,13 +1446,14 @@ with gr.Blocks(title="AI Career Navigator") as demo:
     profile_state = gr.State({})
     discovery_state = gr.State({})
 
-    with gr.Column(visible=True, elem_classes=["container", "upload-shell"]) as screen_upload:
+    with gr.Column(visible=True, elem_classes=["cn-container", "upload-shell"]) as screen_upload:
         with gr.Column(elem_classes="upload-panel"):
             gr.Markdown("# AI Career Navigator")
             gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career workspace with AI exposure, courses, and next steps.")
             with gr.Row(elem_classes="composer-row"):
                 cv_text = gr.Textbox(
                     label="",
+                    show_label=False,
                     lines=1,
                     max_lines=4,
                     placeholder="Paste your CV text here, or upload a PDF next to this line...",
@@ -1441,7 +1464,7 @@ with gr.Blocks(title="AI Career Navigator") as demo:
             gr.Markdown("Your CV is not stored. The analysis runs once through your configured AI provider.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
 
-    with gr.Column(visible=False, elem_classes=["container", "workspace-shell"]) as screen_workspace:
+    with gr.Column(visible=False, elem_classes=["cn-container", "workspace-shell"]) as screen_workspace:
         with gr.Row(elem_classes=["cn-grid", "cn-live-layout"]):
             with gr.Column():
                 teaser_markdown = gr.HTML()
