@@ -35,6 +35,7 @@ def install_gradio_stub_if_needed():
         "Markdown",
         "Textbox",
         "File",
+        "UploadButton",
         "Button",
         "HTML",
         "Radio",
@@ -50,6 +51,11 @@ import app
 
 
 class AppCoreTests(unittest.TestCase):
+    def test_upload_composer_uses_constrained_button_layout(self):
+        self.assertIn("grid-template-columns: minmax(0, 1fr) 132px", app.CSS)
+        self.assertIn(".composer-upload", app.CSS)
+        self.assertIn(".upload-panel:focus-within", app.CSS)
+
     def test_build_cv_content_short_text_alone_fails(self):
         with self.assertRaisesRegex(ValueError, app.CV_ERROR):
             app.build_cv_content(None, "too short")

@@ -1967,9 +1967,13 @@ footer,
   border-radius: 16px;
   padding: 28px;
   max-height: none;
-  overflow: visible;
+  overflow: hidden;
   background: var(--cn-panel);
   box-shadow: 0 18px 46px rgba(0,0,0,.18);
+}
+.upload-panel:focus,
+.upload-panel:focus-within {
+  outline: none !important;
 }
 .upload-panel h1 {
   color: var(--cn-primary);
@@ -1986,11 +1990,15 @@ footer,
 }
 .composer-row {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-columns: minmax(0, 1fr) 132px !important;
   align-items: stretch !important;
   gap: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
 }
 .composer-row > .form,
+.composer-row > *,
 .composer-input,
 .composer-input .wrap,
 .composer-input label,
@@ -2011,11 +2019,20 @@ footer,
   border-radius: 8px !important;
   line-height: 1.45 !important;
 }
+.composer-upload,
+.composer-upload .wrap,
+.composer-upload label,
+.composer-upload button {
+  width: 132px !important;
+  min-width: 132px !important;
+  max-width: 132px !important;
+  overflow: hidden !important;
+}
 .composer-upload button,
 .composer-row button {
-  min-width: 132px !important;
   height: 48px !important;
   border-radius: 8px !important;
+  white-space: nowrap !important;
 }
 .composer-file {
   min-width: 132px !important;
@@ -2775,11 +2792,11 @@ with gr.Blocks(title=APP_NAME) as demo:
                     placeholder="Paste your CV text here, or upload a PDF next to this line...",
                     elem_classes="composer-input",
                 )
-                cv_file = gr.File(
+                cv_file = gr.UploadButton(
                     label="Upload CV",
                     file_types=[".pdf"],
                     file_count="single",
-                    elem_classes="composer-file",
+                    elem_classes="composer-upload",
                 )
             start_button = gr.Button("Start analysis", variant="primary")
             gr.Markdown("Your CV is not stored. The analysis runs once through your configured AI provider.", elem_classes="privacy")
