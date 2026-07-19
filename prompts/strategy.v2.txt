@@ -13,14 +13,14 @@ OUTPUT RULES:
 - Do not invent named courses, URLs, YouTube channels, GitHub repositories, events, books, companies, salaries, statistics, or people.
 - Named external resources are found by the app's research layer. You may provide search intents and resource types.
 - Do not default to "learn Python", "learn agents", "learn Ollama", "become a prompt engineer", or "build AI tools" unless the profile evidence and interview answers make that unusually relevant.
-- Future-proofing means better domain judgment, better communication, better commercial judgment, better process design, better tools, better network, better evidence of work, and better target selection.
+- Future-proofing means better domain judgment, better communication, better commercial judgment, better process design, better tools, better network, better credibility signals, and better target selection.
 - Treat AI exposure as change pressure, not a replacement prophecy.
 
 ANTI-GENERIC RULES:
 - Each perspective must include at least one concrete evidence phrase from the profile.
 - Include at least one non-tech/non-AI-centered perspective unless the CV is purely technical and the interview clearly asks for a technical pivot.
 - At most one perspective may be primarily "AI/tool builder" oriented.
-- At least one proof action must involve contact with real work: shadowing, structured conversations, trial tasks, workflow mapping, volunteering, internal experiment, or stakeholder interviews.
+- At least one credibility action must involve contact with real work: shadowing, structured conversations, trial tasks, workflow mapping, volunteering, internal experiment, stakeholder interviews, policy/process observation, or application feedback.
 - Do not recommend only courses. Learning may include practice, people, books, events, communities, GitHub examples, YouTube searches, and on-the-job experiments.
 - Name a real risk or loss in each perspective: time, status, income, licensing, identity, schedule, energy, or credibility.
 - If ambition, time, and budget conflict, say so inside decision gates or risks instead of silently smoothing it over.
@@ -58,14 +58,14 @@ Return exactly this schema:
 
 QUANTITY RULES:
 - exposure: 5-8 real tasks from the profile. Reasoning is one sentence and includes why the pressure is green/yellow/red.
-- perspectives: exactly 2-3 testable directions. Each must differ in role family, work environment, or proof artifact.
+- perspectives: exactly 2-3 testable directions. Each must differ in role family, work environment, stakeholder arena, or credibility path.
 - target_roles: 2-4 role titles or role families per perspective. Do not simply repeat the current title unless Optimize makes staying the best option.
 - company_profile: describe the type of organization and what it works on, not a fake company name.
 - why_it_fits: cite concrete profile evidence and explain why it transfers.
 - risks: one honest mismatch, loss, or assumption to test.
 - search_terms: 4-6 specific search phrases for live company/job/resource discovery.
 - gaps: exactly 3, or 2 if Optimize and the evidence supports a narrower plan.
-- plan_100: 3-4 phases. Every phase must produce an observable artifact, conversation, experiment, or decision.
+- plan_100: 3-4 phases. Every phase must produce observable evidence such as an artifact, conversation, interview set, field observation, application feedback, decision memo, experiment, or decision.
 - plan_365: four quarters. Q1 must connect to the 100-day plan.
 - decision_gates: exactly 2. At least one should test whether the direction is actually attractive, not just feasible.
 - resources: at least 2 free search intents or actions per gap. Use "Search for: ..." names for external materials. Paid items only if budget allows.

@@ -87,6 +87,13 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("Do not recommend only courses", prompt)
         self.assertIn("search intents", prompt)
 
+    def test_v2_profile_prompt_generates_case_specific_questions(self):
+        prompt = load_prompt("profile", "v2")
+
+        self.assertIn("follow_up_questions", prompt)
+        self.assertIn("case-specific questions", prompt)
+        self.assertIn("Do not assume the person should build a project", prompt)
+
 
 class ProviderTests(unittest.TestCase):
     def test_openai_compatible_chat_supports_pdf_content_and_json_mode(self):

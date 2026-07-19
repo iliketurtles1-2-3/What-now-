@@ -152,7 +152,7 @@ class AppCoreTests(unittest.TestCase):
                 "events": [{"name": "Energy Meetup", "why": "Meet operators"}],
                 "people": [{"name": "Operator newsletter", "why": "Practical examples"}],
                 "books": [{"name": "The Mom Test", "why": "Customer discovery"}],
-                "projects": [{"name": "Proof project", "why": "Show judgment"}],
+                "projects": [{"name": "Credibility evidence", "why": "Show judgment"}],
             },
         )
 
@@ -165,7 +165,7 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("Rooms to enter", sidebar)
         self.assertIn("People to learn from", sidebar)
         self.assertIn("Reading path", sidebar)
-        self.assertIn("Proof work", sidebar)
+        self.assertIn("Credibility signals", sidebar)
 
     def test_workspace_context_uses_interview_and_generated_gaps(self):
         query = app.workspace_search_context(
@@ -272,6 +272,24 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("Next: answer the short interview below", html)
         self.assertIn("founder support", html)
         self.assertIn("Cleantech", html)
+
+    def test_profile_questions_prefers_model_generated_case_questions(self):
+        questions = app.profile_questions(
+            {
+                "current_role": "Policy Advisor",
+                "industry": "Public Affairs",
+                "follow_up_questions": [
+                    "Which institutions do you want to influence most: ministries, regulators, NGOs, parties, or industry associations?",
+                    "What policy areas are credible from your past work, and which would feel like an unsupported jump?",
+                    "How much public visibility, conflict, and stakeholder negotiation do you want in the next role?",
+                    "What would make your policy judgment visible: a briefing note, stakeholder map, hearing analysis, or campaign plan?",
+                ],
+            }
+        )
+
+        self.assertEqual(4, len(questions))
+        self.assertIn("institutions", questions[0])
+        self.assertTrue(all("proof could you realistically build" not in question.lower() for question in questions))
 
     def test_profile_understanding_flags_missing_confidence_inputs(self):
         understanding = app.profile_understanding({"current_role": "Analyst"})

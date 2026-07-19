@@ -407,7 +407,7 @@ def learning_resource_queries(
         {
             "kind": "GitHub",
             "query": f"site:github.com {basis} project examples templates",
-            "why": "Public examples, templates, and proof-project references.",
+            "why": "Public examples and templates when the skill gap calls for technical reference material.",
         },
         {
             "kind": "Book",
@@ -466,14 +466,14 @@ def project_suggestions(profile: dict[str, Any], strategy: dict[str, Any] | None
     base = workspace_search_context(profile, strategy=strategy)
     suggestions = [
         {
-            "name": "Proof project",
-            "why": f"Build a small public artifact around {gap_terms or base}: a workflow map, before/after case, or decision aid.",
+            "name": "Credibility evidence",
+            "why": f"Create field-appropriate evidence around {gap_terms or base}: a stakeholder map, decision memo, workflow case, interview set, application feedback, or small work sample.",
             "url": "",
             "source": "Workspace",
         },
         {
             "name": "Work sample",
-            "why": "Turn one real task from your role into a portfolio-quality example with clear constraints, tradeoffs, and outcome.",
+            "why": "Turn one real task from your role into a concise example with clear constraints, tradeoffs, stakeholders, and outcome.",
             "url": "",
             "source": "Workspace",
         },
@@ -562,9 +562,9 @@ def build_research_tasks(
                 },
                 {
                     "perspective": name,
-                    "area": "Proof project",
-                    "question": "What artifact could prove fit within 30 days?",
-                    "evidence_target": "Project idea, artifact format, audience, and application value.",
+                    "area": "Credibility evidence",
+                    "question": "What field-appropriate evidence could make this direction credible?",
+                    "evidence_target": "Evidence format, audience, access path, and application value.",
                     "query": basis,
                     "source_type": "project",
                 },
@@ -973,10 +973,10 @@ def sidebar_html(
     <p class="cn-data-note">Dynamic search across courses, YouTube, GitHub, books, events, and communities</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
-    <div class="cn-kicker">PROJECTS</div>
-    <h2>Proof work</h2>
+    <div class="cn-kicker">EVIDENCE</div>
+    <h2>Credibility signals</h2>
     <div class="cn-discovery-list">{project_rows}</div>
-    <p class="cn-data-note">Artifacts that prove judgment, not tool fandom</p>
+    <p class="cn-data-note">Field-appropriate evidence, not generic project work</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">EVENTS</div>
@@ -1000,7 +1000,31 @@ def sidebar_html(
 """
 
 
+DEFAULT_FOLLOW_UP_QUESTIONS = [
+    "Which parts of your current work should the next direction contain more of, and which should it contain less of?",
+    "What constraints are real for you right now: income, location, schedule, energy, credentials, risk, or time?",
+    "Which people, institutions, customers, patients, stakeholders, or communities do you actually want your work to affect?",
+    "What would count as credible evidence for a next step in your field: conversations, a memo, shadowing, application feedback, an internal trial, a case example, or something else?",
+]
+
+
+def clean_question_text(value: Any) -> str:
+    question = re.sub(r"\s+", " ", str(value or "")).strip()
+    question = re.sub(r"^\d+[\).\s-]+", "", question).strip()
+    return question
+
+
 def profile_questions(profile: dict[str, Any]) -> list[str]:
+    model_questions = profile.get("follow_up_questions") if isinstance(profile, dict) else None
+    questions: list[str] = []
+    if isinstance(model_questions, list):
+        for item in model_questions:
+            question = clean_question_text(item)
+            if question and question not in questions:
+                questions.append(question)
+            if len(questions) == 4:
+                return questions
+
     role = str(profile.get("current_role") or "your current role")
     industry = str(profile.get("industry") or "this field")
     skills = [str(skill) for skill in (profile.get("skills") or []) if skill]
@@ -1013,12 +1037,31 @@ def profile_questions(profile: dict[str, Any]) -> list[str]:
                 task = str(tasks[0])
                 break
     task = task or skill
-    return [
+    fallback_questions = [
         f"Which part of {role} do you want more of: {task}, strategy, people work, execution, or something else?",
         f"What should the next role avoid repeating from your current work in {industry}?",
         f"Which problem space would make this feel worth it: the current industry, an adjacent field, or a sharper mission?",
-        f"What proof could you realistically build in 30 days that would make someone believe your next direction?",
+        DEFAULT_FOLLOW_UP_QUESTIONS[3],
     ]
+    for question in fallback_questions + DEFAULT_FOLLOW_UP_QUESTIONS:
+        question = clean_question_text(question)
+        if question and question not in questions:
+            questions.append(question)
+        if len(questions) == 4:
+            break
+    return questions
+
+
+def follow_up_field_updates(profile: dict[str, Any] | None = None) -> tuple[Any, Any, Any, Any]:
+    questions = profile_questions(profile or {})
+    return tuple(
+        gr.update(
+            label=f"{index}. {question}",
+            value="",
+            placeholder="Answer in your own words. A few concrete sentences are enough.",
+        )
+        for index, question in enumerate(questions, start=1)
+    )
 
 
 def profile_understanding(profile: dict[str, Any]) -> dict[str, list[str]]:
@@ -1050,7 +1093,7 @@ def profile_understanding(profile: dict[str, Any]) -> dict[str, list[str]]:
     evidence.extend(f"Skill evidence: {skill}" for skill in skills[:3])
     evidence.extend(f"Tool signal: {signal}" for signal in tool_signals[:2])
     if not evidence:
-        evidence.append("The CV has enough structure to start, but explicit proof is thin.")
+        evidence.append("The CV has enough structure to start, but the strongest credibility signals need clarification.")
 
     unclear: list[str] = []
     if not industry:
@@ -1064,7 +1107,7 @@ def profile_understanding(profile: dict[str, Any]) -> dict[str, list[str]]:
     if not tool_signals:
         unclear.append("Current AI/tool usage is not visible from the CV.")
     if not unclear:
-        unclear.append("The main uncertainty is preference: what should change, what should stay, and what proof feels realistic.")
+        unclear.append("The main uncertainty is preference: what should change, what should stay, and what would count as credible evidence in this field.")
 
     return {
         "detected": detected,
@@ -1576,7 +1619,7 @@ def prune_report_files(max_age_seconds: int = REPORT_MAX_AGE_SECONDS) -> None:
 def start_analysis(uploaded_file: Any, cv_text: str | None):
     try:
         content = build_cv_content(uploaded_file, cv_text)
-        result = call_json(PROMPT_1, content, 2000)
+        result = call_json(PROMPT_1, content, 2800)
         profile = result.get("profile", {})
         if profile_is_empty(profile):
             raise ValueError(CV_ERROR)
@@ -1590,6 +1633,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             pending_sidebar_html(profile),
             profile,
             {},
+            *follow_up_field_updates(profile),
             "",
         )
     except ValueError as exc:
@@ -1602,6 +1646,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             "",
             {},
             {},
+            *follow_up_field_updates({}),
             str(exc) if str(exc) == CV_ERROR else API_ERROR,
         )
     except ConfigError as exc:
@@ -1615,6 +1660,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             "",
             {},
             {},
+            *follow_up_field_updates({}),
             CONFIG_ERROR,
         )
     except Exception:
@@ -1629,6 +1675,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             "",
             {},
             {},
+            *follow_up_field_updates({}),
             API_ERROR,
         )
 
@@ -1719,10 +1766,7 @@ def reset_app():
         None,
         None,
         "",
-        "",
-        "",
-        "",
-        "",
+        *follow_up_field_updates({}),
         "",
         None,
         "",
@@ -2817,23 +2861,23 @@ with gr.Blocks(title=APP_NAME) as demo:
                         learning_budget = gr.Radio(BUDGET_OPTIONS, label="Learning budget", interactive=True)
                         trigger = gr.Textbox(label="Trigger", placeholder="What brought you here today?", lines=4)
                     answer_more_of = gr.Textbox(
-                        label="1. What should the next direction include more of?",
-                        placeholder="Example: more patient interaction, less routine scanning, more strategy, more technical depth...",
+                        label=f"1. {DEFAULT_FOLLOW_UP_QUESTIONS[0]}",
+                        placeholder="The app will replace this with a CV-specific question after parsing.",
                         lines=2,
                     )
                     answer_avoid = gr.Textbox(
-                        label="2. What should it avoid repeating?",
-                        placeholder="Example: shift work, unclear growth path, too much admin, weak mentorship...",
+                        label=f"2. {DEFAULT_FOLLOW_UP_QUESTIONS[1]}",
+                        placeholder="The app will replace this with a CV-specific question after parsing.",
                         lines=2,
                     )
                     answer_problem_space = gr.Textbox(
-                        label="3. Which problem space feels worth it?",
-                        placeholder="Example: radiology operations, healthtech, medical devices, climate, public policy...",
+                        label=f"3. {DEFAULT_FOLLOW_UP_QUESTIONS[2]}",
+                        placeholder="The app will replace this with a CV-specific question after parsing.",
                         lines=2,
                     )
                     answer_proof = gr.Textbox(
-                        label="4. What proof could you build in 30 days?",
-                        placeholder="Example: a workflow map, case note, small analysis, interview set, portfolio memo...",
+                        label=f"4. {DEFAULT_FOLLOW_UP_QUESTIONS[3]}",
+                        placeholder="The app will replace this with a CV-specific question after parsing.",
                         lines=2,
                     )
                     report_button = gr.Button("Generate workspace", variant="primary")
@@ -2857,6 +2901,10 @@ with gr.Blocks(title=APP_NAME) as demo:
             live_sidebar,
             profile_state,
             discovery_state,
+            answer_more_of,
+            answer_avoid,
+            answer_problem_space,
+            answer_proof,
             upload_error,
         ],
         api_name=False,

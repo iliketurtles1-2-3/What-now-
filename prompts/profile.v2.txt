@@ -21,7 +21,8 @@ Return exactly this schema:
     "skills": [string, ...],
     "education": [string, ...],
     "ai_tool_signals": [string, ...],
-    "languages": [string, ...]
+    "languages": [string, ...],
+    "follow_up_questions": [string, string, string, string]
   },
   "teaser": [string, string, string]
 }
@@ -34,6 +35,7 @@ FIELD GUIDANCE:
 - roles.key_tasks: extract concrete work, not generic traits. Prefer "perform MRI exams on Siemens scanners" over "healthcare experience".
 - skills: include technical, domain, operational, interpersonal, commercial, regulatory, communication, and judgment skills.
 - ai_tool_signals: only explicit AI/tool signals from the CV. Empty list if absent.
+- follow_up_questions: exactly four case-specific questions the app should ask before recommending directions. These must be generated from the actual profile, not a fixed template. Ask about the person's real decision context: desired work, constraints, audiences/stakeholders, credibility signals, disliked tasks, risk tolerance, geography, licensing, schedule, income floor, influence, or domain preference. Do not assume the person should build a project, become a technical builder, or prove themselves through software unless the CV clearly supports that.
 
 TEASER RULES:
 - Exactly three observations.
