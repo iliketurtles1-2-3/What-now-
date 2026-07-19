@@ -1247,8 +1247,15 @@ CSS = """
   font-family: Inter, system-ui, sans-serif !important;
   min-height: 100vh !important;
   overflow-x: hidden !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+.gradio-container,
+.gradio-container * {
+  box-sizing: border-box !important;
 }
 body {
+  margin: 0 !important;
   overflow-x: hidden !important;
 }
 footer,
@@ -1260,8 +1267,11 @@ footer,
   display: none !important;
 }
 .container {
-  width: min(1180px, calc(100vw - 32px));
-  margin: 0 auto;
+  width: min(1180px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px) !important;
+  margin: 0 auto !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 .workspace-shell {
   min-height: auto !important;
@@ -1364,16 +1374,24 @@ footer,
 }
 .cn-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 360px);
   gap: 22px;
   flex: 1;
   min-height: 0;
   align-items: start;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
 }
 .cn-live-layout {
   display: grid !important;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr) !important;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 360px) !important;
   align-items: start !important;
+}
+.cn-live-layout > *,
+.cn-grid > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 .cn-chat-panel, .cn-side-card, .interview-panel, .report-shell {
   border: 1px solid var(--cn-line);
