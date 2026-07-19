@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ import gradio as gr
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
 OPENAI_API_MODE = os.getenv("OPENAI_API_MODE", "responses").strip().lower()
+OPENAI_JSON_MODE = os.getenv("OPENAI_JSON_MODE", "").strip().lower() in {"1", "true", "yes"}
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-4.1",
@@ -158,15 +160,17 @@ def call_openai(system_prompt: str, user_content: Any, max_tokens: int) -> str:
     if OPENAI_API_MODE == "chat":
         if not isinstance(user_content, str):
             raise ValueError(CV_ERROR)
-        response = openai_client().chat.completions.create(
-            model=MODEL,
-            messages=[
+        request_args = {
+            "model": MODEL,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
-        )
+            "max_tokens": max_tokens,
+        }
+        if OPENAI_JSON_MODE:
+            request_args["response_format"] = {"type": "json_object"}
+        response = openai_client().chat.completions.create(**request_args)
         return response.choices[0].message.content or ""
 
     if OPENAI_API_MODE != "responses":
@@ -512,6 +516,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             str(exc) if str(exc) == CV_ERROR else API_ERROR,
         )
     except Exception:
+        traceback.print_exc()
         return (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), "", {}, API_ERROR)
 
 
@@ -553,6 +558,7 @@ def create_report(profile: dict[str, Any], adaptation: str, time_budget: str, le
         message = str(exc) if str(exc) != CV_ERROR else CV_ERROR
         return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), "", None, message)
     except Exception:
+        traceback.print_exc()
         return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)
 
 

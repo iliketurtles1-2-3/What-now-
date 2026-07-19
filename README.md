@@ -62,6 +62,20 @@ export OPENAI_BASE_URL=https://your-provider.example.com/v1
 python app.py
 ```
 
+OpenRouter + GLM example:
+
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_API_MODE=chat
+export LLM_MODEL=z-ai/glm-5.2
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_API_KEY=your_openrouter_key_here
+unset OPENAI_JSON_MODE
+python app.py
+```
+
+Leave `OPENAI_JSON_MODE` unset for OpenRouter unless your selected model explicitly supports OpenAI JSON mode.
+
 The app binds to `0.0.0.0:7860`. Open:
 
 ```text
