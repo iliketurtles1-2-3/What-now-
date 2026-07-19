@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 CATALOG_PATH = Path(__file__).with_name("catalog.json")
 FREE_COMPATIBLE_COSTS = {"free", "audit_free"}
+VALID_COST_TYPES = FREE_COMPATIBLE_COSTS | {"subscription", "paid"}
 LEVEL_ORDER = {"beginner": 0, "intermediate": 1, "advanced": 2}
 DEFAULT_LANGUAGE = "English"
 
@@ -54,6 +55,8 @@ def validate_course(course: dict[str, Any]) -> None:
         raise ValueError(f"Course {course['id']} must use a verified HTTPS URL.")
     if course["level"] not in LEVEL_ORDER:
         raise ValueError(f"Course {course['id']} has unsupported level: {course['level']}")
+    if course["cost_type"] not in VALID_COST_TYPES:
+        raise ValueError(f"Course {course['id']} has unsupported cost_type: {course['cost_type']}")
     if not isinstance(course["skills"], list) or not course["skills"]:
         raise ValueError(f"Course {course['id']} must contain at least one skill.")
     cost_eur = course["cost_eur"]
@@ -63,6 +66,12 @@ def validate_course(course: dict[str, Any]) -> None:
         raise ValueError(f"Course {course['id']} must use a non-negative numeric cost_eur or null.")
     if course["cost_type"] in FREE_COMPATIBLE_COSTS and cost_eur != 0:
         raise ValueError(f"Course {course['id']} must use cost_eur 0 for free-compatible access.")
+    if (
+        not isinstance(course["time_hours"], int | float)
+        or isinstance(course["time_hours"], bool)
+        or course["time_hours"] <= 0
+    ):
+        raise ValueError(f"Course {course['id']} must use positive numeric time_hours.")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(course["last_verified"])):
         raise ValueError(f"Course {course['id']} must use YYYY-MM-DD last_verified.")
 

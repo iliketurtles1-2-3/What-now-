@@ -22,6 +22,7 @@ REQUIRED_FIELDS = {
     "format": str,
     "cost_type": str,
     "cost_note": str,
+    "cost_eur": (int, float, type(None)),
     "time_hours": (int, float),
     "language": str,
     "last_verified": str,
@@ -102,6 +103,13 @@ def validate_entry_schema(entry: Any, index: int) -> dict[str, Any]:
         result["errors"].append("level is not recognized")
     if isinstance(entry.get("cost_type"), str) and entry["cost_type"] not in VALID_COST_TYPES:
         result["errors"].append("cost_type is not recognized")
+    cost_eur = entry.get("cost_eur")
+    if isinstance(cost_eur, bool) or (
+        cost_eur is not None and isinstance(cost_eur, (int, float)) and cost_eur < 0
+    ):
+        result["errors"].append("cost_eur must be non-negative or null")
+    if entry.get("cost_type") in {"free", "audit_free"} and cost_eur != 0:
+        result["errors"].append("free-compatible courses must use cost_eur 0")
     if isinstance(entry.get("time_hours"), (int, float)) and entry["time_hours"] <= 0:
         result["errors"].append("time_hours must be positive")
     if isinstance(entry.get("last_verified"), str) and not DATE_PATTERN.match(entry["last_verified"]):

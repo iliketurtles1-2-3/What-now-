@@ -19,6 +19,7 @@ def catalog_entry(**overrides):
         "format": "course",
         "cost_type": "free",
         "cost_note": "Free",
+        "cost_eur": 0,
         "time_hours": 3,
         "language": "English",
         "last_verified": "2026-07-19",
@@ -97,6 +98,17 @@ class CourseVerifierTests(unittest.TestCase):
 
         self.assertFalse(report["valid"])
         self.assertIn("duplicate id", report["entries"][1]["errors"])
+
+    def test_invalid_numeric_cost_fails(self):
+        path = self.write_catalog([catalog_entry(cost_eur=-1)])
+
+        report = verifier.verify_catalog(path, offline=True)
+
+        self.assertFalse(report["valid"])
+        self.assertIn(
+            "cost_eur must be non-negative or null",
+            report["entries"][0]["errors"],
+        )
 
     def test_online_validation_records_status_redirect_and_title(self):
         path = self.write_catalog([catalog_entry()])

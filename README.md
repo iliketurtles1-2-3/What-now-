@@ -133,7 +133,7 @@ Create `/etc/systemd/system/ki-karriere-check.service`:
 
 ```ini
 [Unit]
-Description=KI-Karriere-Check Gradio App
+Description=AI Career Navigator Gradio App
 After=network.target
 
 [Service]
@@ -211,17 +211,17 @@ pip install -r requirements.txt
 
 ## Sample CV Text For Testing
 
-Anna Müller
+Anna Miller
 
-Senior Marketing Managerin mit 9 Jahren Erfahrung in B2B-SaaS, zuletzt bei einem mittelständischen Softwareanbieter für HR-Tools. Verantwortlich für Content-Strategie, Kampagnenplanung, Newsletter, Webinar-Konzeption, LinkedIn-Kommunikation und die Koordination externer Agenturen. Führte ein kleines Team aus zwei Content-Spezialistinnen und einem Performance-Marketer.
+Senior Marketing Manager with nine years of B2B SaaS experience, most recently at a mid-sized HR software company. Responsible for content strategy, campaign planning, newsletters, webinars, LinkedIn communication, and external agency coordination. Managed two content specialists and one performance marketer.
 
-Berufserfahrung:
-2021 bis heute: Senior Marketing Managerin, PeopleFlow GmbH. Aufbau einer Thought-Leadership-Strategie für HR-Entscheider, Planung von Quartalskampagnen, Briefing von Design und Sales, Auswertung von HubSpot- und LinkedIn-Daten, Erstellung von Landingpages und Case Studies. Erste Nutzung von ChatGPT für Themenrecherche, Gliederungen und Varianten von Anzeigen-Texten.
+Experience:
+2021 to present: Senior Marketing Manager, PeopleFlow GmbH. Built a thought-leadership program for HR decision makers, planned quarterly campaigns, briefed design and sales teams, analyzed HubSpot and LinkedIn data, and produced landing pages and case studies. Introduced ChatGPT for topic research, outlines, and advertising-copy variants.
 
-2017 bis 2021: Content Marketing Managerin, CloudDesk AG. Redaktion von Blogartikeln, Whitepapern und Kunden-Newslettern, SEO-Recherche, Zusammenarbeit mit Produktmanagement und Vertrieb. Einführung eines Redaktionsplans und monatlicher Performance-Reports.
+2017 to 2021: Content Marketing Manager, CloudDesk AG. Wrote blog articles, white papers, and customer newsletters; conducted SEO research; partnered with product management and sales; and introduced an editorial calendar with monthly performance reporting.
 
-2014 bis 2017: Junior Marketing Specialist, Messeagentur Berlin. Organisation von Fachmessen, Pflege von CRM-Daten, Erstellung von Präsentationen und Nachbereitung von Leads.
+2014 to 2017: Junior Marketing Specialist, Berlin Events Agency. Organized trade fairs, maintained CRM data, prepared presentations, and followed up sales leads.
 
-Skills: Content Marketing, B2B-Kommunikation, HubSpot, Google Analytics, LinkedIn Ads, SEO, Webinar-Konzeption, Stakeholder-Management, Projektplanung, Deutsch Muttersprache, Englisch fließend.
+Skills: Content marketing, B2B communication, HubSpot, Google Analytics, LinkedIn Ads, SEO, webinar production, stakeholder management, project planning. Native German and fluent English.
 
-Ausbildung: Master in Kommunikationswissenschaft, Bachelor in Betriebswirtschaft.
+Education: MA in Communication Studies; BA in Business Administration.
