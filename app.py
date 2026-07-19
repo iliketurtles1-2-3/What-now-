@@ -15,6 +15,8 @@ from typing import Any
 
 import gradio as gr
 
+from courses.matcher import match_courses
+
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
 OPENAI_API_MODE = os.getenv("OPENAI_API_MODE", "responses").strip().lower()
@@ -858,6 +860,90 @@ def rating_icon(rating: str) -> str:
     }.get(str(rating).lower(), "MEDIUM")
 
 
+def time_budget_to_hours(time_budget: str | None) -> float | None:
+    if not time_budget:
+        return None
+    if time_budget.startswith("< 2"):
+        return 8
+    if time_budget.startswith("2-5"):
+        return 20
+    if time_budget.startswith("5-10"):
+        return 40
+    if time_budget.startswith("> 10"):
+        return 80
+    return None
+
+
+def adaptation_to_course_level(adaptation: str | None) -> str | None:
+    if not adaptation:
+        return None
+    if adaptation.startswith("Optimize"):
+        return "beginner"
+    if adaptation.startswith("Develop"):
+        return "intermediate"
+    if adaptation.startswith("Reinvent"):
+        return "advanced"
+    return None
+
+
+def verified_course_resources(
+    gaps: list[dict[str, Any]],
+    *,
+    learning_budget: str,
+    time_budget: str,
+    adaptation: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    if not gaps:
+        return [], []
+
+    result = match_courses(
+        gaps,
+        budget=learning_budget,
+        time_hours=time_budget_to_hours(time_budget),
+        level=adaptation_to_course_level(adaptation),
+        limit=6,
+    )
+    resources_by_gap: dict[str, dict[str, Any]] = {}
+
+    for item in result["recommendations"]:
+        course = item["course"]
+        matched_gap = item["matched_gaps"][0] if item["matched_gaps"] else "general"
+        resource = resources_by_gap.setdefault(matched_gap, {"gap": matched_gap, "free": [], "paid": []})
+        target = "free" if course["cost_type"] in {"free", "audit_free"} else "paid"
+        resource[target].append(
+            {
+                "name": course["title"],
+                "provider": course["provider"],
+                "url": course["url"],
+                "format": course["format"].replace("_", " ").title(),
+                "time_cost": f'{course["time_hours"]:g} hours',
+                "cost_estimate": course["cost_note"],
+                "why": "; ".join(item.get("why", [])),
+            }
+        )
+
+    return list(resources_by_gap.values()), result["fallbacks"]
+
+
+def apply_verified_courses(
+    report_data: dict[str, Any],
+    *,
+    learning_budget: str,
+    time_budget: str,
+    adaptation: str,
+) -> dict[str, Any]:
+    resources, fallbacks = verified_course_resources(
+        report_data.get("gaps", []),
+        learning_budget=learning_budget,
+        time_budget=time_budget,
+        adaptation=adaptation,
+    )
+    if resources:
+        report_data["resources"] = resources
+    report_data["course_fallbacks"] = fallbacks
+    return report_data
+
+
 def render_report(data: dict[str, Any]) -> str:
     lines = ["# AI Career Workspace", ""]
 
@@ -899,14 +985,28 @@ def render_report(data: dict[str, Any]) -> str:
         lines.append(f"**{resource.get('gap', '')}**")
         lines.append("**Free:**")
         for item in resource.get("free", []):
-            lines.append(f"- {item.get('name', '')} ({item.get('format', '')}, {item.get('time_cost', '')})")
+            name = item.get("name", "")
+            url = item.get("url")
+            label = f"[{name}]({url})" if url else name
+            provider = item.get("provider", "")
+            lines.append(f"- {label} - {provider} ({item.get('format', '')}, {item.get('time_cost', '')})")
         paid = resource.get("paid", [])
         if paid:
             lines.append("**Paid:**")
             for item in paid:
+                name = item.get("name", "")
+                url = item.get("url")
+                label = f"[{name}]({url})" if url else name
+                provider = item.get("provider", "")
                 lines.append(
-                    f"- {item.get('name', '')} ({item.get('format', '')}, {item.get('cost_estimate', '')}, {item.get('time_cost', '')})"
+                    f"- {label} - {provider} ({item.get('format', '')}, {item.get('cost_estimate', '')}, {item.get('time_cost', '')})"
                 )
+        lines.append("")
+    fallbacks = data.get("course_fallbacks", [])
+    if fallbacks:
+        lines.append("**Still to research:**")
+        for fallback in fallbacks:
+            lines.append(f"- Search for: {fallback.get('search_phrase', fallback.get('gap', 'course'))}")
         lines.append("")
 
     repositioning = data.get("repositioning", {})
@@ -977,6 +1077,11 @@ def markdown_to_basic_html(markdown: str) -> str:
 
 def inline_markdown(text: str) -> str:
     escaped = escape_html(text)
+    escaped = re.sub(
+        r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
+        r'<a href="\2" target="_blank" rel="noopener noreferrer">\1</a>',
+        escaped,
+    )
     escaped = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", escaped)
     escaped = re.sub(r"\*(.*?)\*", r"<em>\1</em>", escaped)
     return escaped
@@ -1088,6 +1193,12 @@ def create_report(
         user_payload = json.dumps({"profile": profile, "interview": interview}, ensure_ascii=False, indent=2)
         result = call_json(PROMPT_2, f"Create the career workspace from this data:\n\n{user_payload}", 8000)
         result = enforce_budget_rules(result, learning_budget)
+        result = apply_verified_courses(
+            result,
+            learning_budget=learning_budget,
+            time_budget=time_budget,
+            adaptation=adaptation,
+        )
         report = render_report(result)
         download_path = write_report_file(report)
         return (
