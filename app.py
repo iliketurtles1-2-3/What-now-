@@ -1,4 +1,3 @@
-import base64
 import json
 import os
 import re
@@ -31,7 +30,9 @@ ARBEITNOW_BASE_URL = os.getenv("ARBEITNOW_BASE_URL", "https://www.arbeitnow.com/
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
 LIVE_SEARCH_PROVIDER = os.getenv("LIVE_SEARCH_PROVIDER", "tavily" if TAVILY_API_KEY else "serpapi").strip().lower()
-REPORT_DIR = Path(tempfile.gettempdir()) / "ai-career-navigator-reports"
+APP_NAME = "WTFDID"
+APP_FULL_NAME = "What the fuck do I do?"
+REPORT_DIR = Path(tempfile.gettempdir()) / "wtfdid-reports"
 REPORT_MAX_AGE_SECONDS = 24 * 60 * 60
 
 ADAPTATION_OPTIONS = [
@@ -67,6 +68,20 @@ def file_path(uploaded_file: Any) -> str | None:
     return getattr(uploaded_file, "name", None) or getattr(uploaded_file, "path", None)
 
 
+def extract_pdf_text(path: Path) -> str:
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(path))
+        pages = [page.extract_text() or "" for page in reader.pages[:20]]
+    except (ImportError, Exception) as exc:
+        raise ValueError(CV_ERROR) from exc
+    text = "\n\n".join(page.strip() for page in pages if page.strip())
+    if len(text) < 300:
+        raise ValueError(CV_ERROR)
+    return text
+
+
 def build_cv_content(uploaded_file: Any, cv_text: str | None) -> Any:
     text = (cv_text or "").strip()
     path_value = file_path(uploaded_file)
@@ -85,18 +100,8 @@ def build_cv_content(uploaded_file: Any, cv_text: str | None) -> Any:
     if path.suffix.lower() != ".pdf" or not path.exists() or path.stat().st_size > MAX_PDF_BYTES:
         raise ValueError(CV_ERROR)
 
-    encoded_pdf = base64.b64encode(path.read_bytes()).decode("utf-8")
-    return [
-        {
-            "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": encoded_pdf,
-            },
-        },
-        {"type": "text", "text": "Analyze this PDF CV."},
-    ]
+    pdf_text = extract_pdf_text(path)
+    return f"Analyze this extracted PDF CV text:\n\n{pdf_text}"
 
 
 def profile_is_empty(profile: dict[str, Any]) -> bool:
@@ -355,10 +360,10 @@ def app_header_html() -> str:
     return f"""
 <header class="cn-appbar">
   <div class="cn-brand">
-    <div class="cn-logo" aria-hidden="true">CN</div>
+    <div class="cn-logo" aria-hidden="true"><span class="cn-logo-face"></span></div>
     <div>
-      <strong>AI Career Navigator</strong>
-      <span>interactive career workspace</span>
+      <strong>{APP_NAME}</strong>
+      <span>{APP_FULL_NAME}</span>
     </div>
   </div>
   <nav class="cn-app-actions" aria-label="Application controls">
@@ -1119,6 +1124,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             CONFIG_ERROR,
         )
     except Exception:
+        print("start_analysis failed")
         traceback.print_exc()
         return (
             gr.update(visible=True),
@@ -1183,6 +1189,7 @@ def create_report(
         print(exc)
         return (gr.update(visible=True), gr.update(visible=False), "", None, CONFIG_ERROR)
     except Exception:
+        print("create_report failed")
         traceback.print_exc()
         return (gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)
 
@@ -1213,6 +1220,7 @@ def reset_app():
 CSS = """
 :root {
   --cn-bg: #070d0a;
+  --cn-bg-2: #0c1710;
   --cn-primary: #f4fff6;
   --cn-text: #d6ede0;
   --cn-soft: #9fc2ac;
@@ -1226,7 +1234,7 @@ html,
 body,
 gradio-app,
 .gradio-container {
-  background: var(--cn-bg) !important;
+  background-color: var(--cn-bg) !important;
   color: #eafbee !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
   min-height: 100vh !important;
@@ -1234,9 +1242,37 @@ gradio-app,
   max-width: none !important;
   padding: 0 !important;
 }
+.gradio-container {
+  isolation: isolate !important;
+}
+.gradio-container::before {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(91,224,138,.18), transparent 34rem),
+    radial-gradient(circle at 90% 14%, rgba(224,200,91,.1), transparent 30rem),
+    linear-gradient(135deg, var(--cn-bg), var(--cn-bg-2) 58%, #050806) !important;
+}
+.gradio-container > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
 .gradio-container,
 .gradio-container * {
   box-sizing: border-box !important;
+}
+.gradio-container,
+.gradio-container section,
+.gradio-container .block,
+.gradio-container .form {
+  outline-color: rgba(91,224,138,.75) !important;
+}
+.gradio-container *:focus-visible {
+  outline: 2px solid rgba(91,224,138,.75) !important;
+  outline-offset: 2px !important;
 }
 body {
   margin: 0 !important;
@@ -1290,13 +1326,41 @@ footer,
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: var(--cn-accent);
-  color: #07130c;
+  background: radial-gradient(circle at 38% 28%, #fff7a8 0 24%, #ffd64d 42%, #f29b1d 77%);
+  color: #3d2700;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 12px;
+  box-shadow: inset 0 -3px 0 rgba(88,54,0,.22), 0 0 0 1px rgba(255,255,255,.18);
+}
+.cn-logo-face {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.cn-logo-face::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 5px;
+  width: 4px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6d4200;
+  box-shadow: 10px 0 0 #6d4200;
+}
+.cn-logo-face::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 3px;
+  height: 7px;
+  border: 2px solid #744700;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, #f7f7ef 0 4px, #bfc5c5 4px 5px);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.55);
 }
 .cn-app-actions {
   display: flex;
@@ -1435,9 +1499,28 @@ footer,
   height: 48px !important;
   border-radius: 8px !important;
 }
+.composer-file {
+  min-width: 132px !important;
+  max-width: 220px !important;
+}
+.composer-file .wrap,
+.composer-file label,
+.composer-file .container,
+.composer-file .file-preview,
+.composer-file .file-preview-holder {
+  min-height: 48px !important;
+  max-height: 70px !important;
+}
+.composer-file label > span {
+  display: none !important;
+}
+.composer-file .file-preview-holder,
+.composer-file .file-preview {
+  overflow: hidden !important;
+}
 .cn-shell {
   min-height: min(680px, calc(100vh - 48px));
-  background: var(--cn-bg);
+  background: transparent;
   padding: 28px 0 8px;
   box-sizing: border-box;
   display: flex;
@@ -1682,7 +1765,8 @@ footer,
   flex-wrap: wrap;
   gap: 8px;
   padding: 0 0 12px;
-  background: var(--cn-bg);
+  background: rgba(7,13,10,.9);
+  backdrop-filter: blur(10px);
 }
 .cn-workspace-tabs a {
   border: 1px solid var(--cn-line);
@@ -1939,14 +2023,14 @@ button.primary {
 }
 """
 
-with gr.Blocks(title="AI Career Navigator") as demo:
+with gr.Blocks(title=APP_NAME) as demo:
     profile_state = gr.State({})
     discovery_state = gr.State({})
 
     with gr.Column(visible=True, elem_classes=["cn-container", "upload-shell"]) as screen_upload:
         gr.HTML(app_header_html())
         with gr.Column(elem_classes="upload-panel"):
-            gr.Markdown("# AI Career Navigator")
+            gr.Markdown(f"# {APP_NAME}")
             gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career workspace with AI exposure, courses, and next steps.")
             with gr.Row(elem_classes="composer-row"):
                 cv_text = gr.Textbox(
@@ -1957,7 +2041,12 @@ with gr.Blocks(title="AI Career Navigator") as demo:
                     placeholder="Paste your CV text here, or upload a PDF next to this line...",
                     elem_classes="composer-input",
                 )
-                cv_file = gr.UploadButton("Upload CV", file_types=[".pdf"], file_count="single", elem_classes="composer-upload")
+                cv_file = gr.File(
+                    label="Upload CV",
+                    file_types=[".pdf"],
+                    file_count="single",
+                    elem_classes="composer-file",
+                )
             start_button = gr.Button("Start analysis", variant="primary")
             gr.Markdown("Your CV is not stored. The analysis runs once through your configured AI provider.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)

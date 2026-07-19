@@ -34,7 +34,7 @@ def install_gradio_stub_if_needed():
         "State",
         "Markdown",
         "Textbox",
-        "UploadButton",
+        "File",
         "Button",
         "HTML",
         "Radio",
@@ -54,7 +54,7 @@ class AppCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, app.CV_ERROR):
             app.build_cv_content(None, "too short")
 
-    def test_build_cv_content_short_text_plus_valid_pdf_uses_pdf(self):
+    def test_build_cv_content_short_text_plus_valid_pdf_extracts_text(self):
         import tempfile
         from pathlib import Path
 
@@ -62,11 +62,12 @@ class AppCoreTests(unittest.TestCase):
             pdf_path = Path(tmp_dir) / "cv.pdf"
             pdf_path.write_bytes(b"%PDF-1.4\nsynthetic test pdf\n")
 
-            content = app.build_cv_content(str(pdf_path), "short")
+            with patch.object(app, "extract_pdf_text", return_value="Extracted CV text " * 30):
+                content = app.build_cv_content(str(pdf_path), "short")
 
-        self.assertIsInstance(content, list)
-        self.assertEqual(content[0]["type"], "document")
-        self.assertEqual(content[0]["source"]["media_type"], "application/pdf")
+        self.assertIsInstance(content, str)
+        self.assertTrue(content.startswith("Analyze this extracted PDF CV text:"))
+        self.assertIn("Extracted CV text", content)
 
     def test_build_cv_content_long_text_is_accepted(self):
         cv_text = "Senior analyst with Python, SQL, stakeholder management, and reporting experience. " * 8

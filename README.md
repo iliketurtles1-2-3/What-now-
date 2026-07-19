@@ -1,8 +1,11 @@
 # AI Career Navigator
 
-Working Gradio prototype for CV analysis and career development.
+# WTFDID
 
-The product is being redesigned as an English, in-app career workspace. Users will
+What the fuck do I do? Working Gradio prototype for interactive CV analysis and
+career development.
+
+The product is being redesigned as an English, in-app career workspace. Users
 upload or paste a CV, receive an evidence-based assessment, answer four fixed
 questions, and build a development plan with verified courses and practical
 milestones.
@@ -132,11 +135,11 @@ http://YOUR_SERVER_IP:7860
 
 ## Run As A Systemd Service
 
-Create `/etc/systemd/system/ki-karriere-check.service`:
+Create `/etc/systemd/system/wtfdid.service`:
 
 ```ini
 [Unit]
-Description=AI Career Navigator Gradio App
+Description=WTFDID Gradio App
 After=network.target
 
 [Service]
@@ -157,9 +160,9 @@ Then run:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable ki-karriere-check
-sudo systemctl start ki-karriere-check
-sudo systemctl status ki-karriere-check
+sudo systemctl enable wtfdid
+sudo systemctl start wtfdid
+sudo systemctl status wtfdid
 ```
 
 ## Reverse Proxy With Nginx
@@ -190,11 +193,10 @@ sudo certbot --nginx -d your-domain.example
 ## Notes About CV Testing
 
 - Pasted CV text works with every configured provider.
-- PDF upload is sent directly to the provider as file/document input. Anthropic uses a PDF document block. OpenAI uses Responses API file input.
-- Most OpenAI-compatible providers support `OPENAI_API_MODE=chat`, which is best for pasted CV text.
-- PDF upload works with Anthropic document input, OpenAI Responses file input, and OpenRouter chat file input. Other OpenAI-compatible chat endpoints may not implement the same file-part contract.
+- PDF upload is extracted locally with `pypdf` and then sent as text, so it works with OpenRouter and other OpenAI-compatible chat providers without native PDF/file support.
+- Most OpenAI-compatible providers support `OPENAI_API_MODE=chat`, which is best for this app.
 - Some OpenAI-compatible providers may not support JSON response formatting. If that happens, use Anthropic or OpenAI Responses for the CV test run.
-- Files are not persisted by the app. The markdown report download is generated in the system temp directory for the current session.
+- Files are not persisted by the app. The backup notes export is generated in the system temp directory for the current session.
 
 ## Python Support
 
