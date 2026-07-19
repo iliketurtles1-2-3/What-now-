@@ -24,3 +24,7 @@ tmp_reports/
 *_CV.pdf
 workspace-notes-*.md
 ai-career-navigator-reports/
+
+# Local coding-agent configuration.
+.claude/
+.agents/

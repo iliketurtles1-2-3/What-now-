@@ -9,6 +9,52 @@ modules to avoid overlapping changes.
 Real CVs must remain local and untracked. Test fixtures committed to the repository
 must be synthetic or thoroughly anonymized.
 
+`docs/CLEANUP_REPORT.md` is the active technical-debt audit. Its open findings are
+release work, not optional polish. They are assigned to the phases below so cleanup
+and the framework redesign do not create competing backlogs.
+
+## Cleanup gates
+
+### Baseline gate
+
+- [x] N2: make every existing test discoverable with the standard library.
+- [x] N2: resolve the course-catalog path relative to the test file.
+- [x] N2: add a minimal CI workflow for compilation and the complete test suite.
+- [x] Keep local `.claude/` and `.agents/` configuration out of the repository.
+
+### Framework-core gate
+
+- [ ] O1: verify provider default model IDs against current official documentation.
+- [ ] O5: remove the remaining German internal strings and defaults.
+- [ ] N6: remove `app_shell_html` rather than carrying dead rendering code forward.
+- [ ] N7: remove the unreachable exception handler from `interesting_jobs`.
+- [ ] N9: rename `rating_icon` and simplify model-response repair logging.
+- [ ] N11: remove the unused discovery input from strategy generation. Optional,
+      noisy discovery data must not influence the core recommendation contract.
+
+### Course-integrity gate
+
+- [ ] N3: discard model-generated course names in all cases.
+- [ ] N4: preserve original skill-gap labels in course presentation.
+- [ ] N1: add numeric course costs and enforce non-zero budget constraints.
+- [ ] N1: treat "over X" as an uncapped budget tier.
+- [ ] N5: power the sidebar course area from the verified local catalog.
+- [ ] N10: verify every catalog URL and title before retaining `last_verified`.
+
+### Experience and discovery gate
+
+- [ ] O2: remove the Google Fonts import and use a privacy-safe font stack.
+- [ ] O3: replace the over-constrained exact-phrase company query.
+- [ ] N8: accurately label or hide web discovery when no provider is configured.
+- [ ] O4: remove obsolete local empty agent directories where present.
+
+### Documentation gate
+
+- [ ] N9: align the GLM model slug across the live-test guide and README.
+- [ ] N9: define one supported Python range across installation documentation.
+- [ ] Replace the long-report and generic roadmap assumptions in this plan with
+      the persistent pathway-comparison workspace contract.
+
 ## Definition of v0.1
 
 The v0.1 release is complete when a user can:
