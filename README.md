@@ -11,6 +11,7 @@ Product and implementation documentation:
 
 - [Product architecture](docs/PRODUCT_ARCHITECTURE.md)
 - [Implementation plan and backlog](docs/IMPLEMENTATION_PLAN.md)
+- [Recommendation contract review](docs/RECOMMENDATION_CONTRACT_REVIEW.md)
 
 The current runtime still reflects parts of the earlier German Markdown-report
 prototype. The linked implementation plan tracks the migration to the new
@@ -104,7 +105,8 @@ Leave `OPENAI_JSON_MODE` unset for OpenRouter unless your selected model explici
 The sidebar tiles use live data at runtime:
 
 - Jobs: Arbeitnow job board API by default (`ARBEITNOW_BASE_URL`)
-- Companies and recent signals: Tavily or SerpAPI web/news search
+- Companies: Tavily or SerpAPI web search
+- Courses: deterministic matching against the verified local catalog
 
 Configure one search provider for full live tiles:
 
@@ -121,7 +123,8 @@ export LIVE_SEARCH_PROVIDER=serpapi
 
 Without Tavily or SerpAPI, the app still tries live jobs from Arbeitnow, but company and recent-news tiles show a configuration note instead of AI-invented results.
 
-The app binds to `0.0.0.0:7860`. Open:
+The app binds to `0.0.0.0:7860` by default. Override the binding with
+`GRADIO_SERVER_NAME` and `GRADIO_SERVER_PORT`. Open:
 
 ```text
 http://YOUR_SERVER_IP:7860

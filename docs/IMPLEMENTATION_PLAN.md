@@ -157,7 +157,7 @@ Acceptance:
 - [ ] Add ranking based on the prioritized gaps.
 - [ ] Add a fallback search phrase when no verified course fits.
 - [ ] Add a save-to-plan action in the course interface.
-- [ ] Remove recent market signals from the interface and code path.
+- [x] Remove recent market signals from the interface and code path.
 
 Acceptance:
 
