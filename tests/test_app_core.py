@@ -164,6 +164,16 @@ class AppCoreTests(unittest.TestCase):
         sidebar = app.sidebar_html(
             {"current_role": "Coordinator", "skills": ["stakeholder management"]},
             {
+                "research_tasks": [
+                    {
+                        "perspective": "Climate partnerships operator",
+                        "area": "Companies",
+                        "question": "Which organizations could plausibly hire this person?",
+                        "evidence_target": "Company, fit angle, risk, source.",
+                        "status": "researched",
+                        "findings": [{"name": "Climate Co", "url": "https://example.com"}],
+                    }
+                ],
                 "companies": [{"name": "Climate Co", "why": "Builds grid software"}],
                 "jobs": [{"title": "Partnerships Associate", "why": "Berlin"}],
                 "courses": [{"name": "Negotiation", "why": "Gap fit"}],
@@ -174,6 +184,9 @@ class AppCoreTests(unittest.TestCase):
             },
         )
 
+        self.assertIn("Research queue", sidebar)
+        self.assertIn("Evidence to collect", sidebar)
+        self.assertIn("Climate partnerships operator", sidebar)
         self.assertIn("Companies to inspect", sidebar)
         self.assertIn("Specific openings", sidebar)
         self.assertIn("Rooms to enter", sidebar)
@@ -212,6 +225,47 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("Climate partnerships operator", query)
         self.assertIn("Partnerships Associate", query)
         self.assertIn("climate partnerships jobs", query)
+
+    def test_research_tasks_are_built_from_perspectives(self):
+        tasks = app.build_research_tasks(
+            {"current_role": "Radiologic Technologist", "industry": "Healthcare", "skills": ["MRI"]},
+            {"adaptation_level": "Develop", "trigger": "move toward healthtech"},
+            {
+                "perspectives": [
+                    {
+                        "name": "Radiology workflow specialist",
+                        "target_roles": ["Clinical Application Specialist"],
+                        "company_profile": "medical imaging software companies",
+                        "search_terms": ["radiology workflow jobs"],
+                    }
+                ]
+            },
+        )
+
+        self.assertGreaterEqual(len(tasks), 5)
+        self.assertTrue(all(task["perspective"] == "Radiology workflow specialist" for task in tasks))
+        self.assertIn("Companies", {task["area"] for task in tasks})
+        self.assertIn("Specific roles", {task["area"] for task in tasks})
+        self.assertIn("medical imaging software companies", tasks[0]["query"])
+
+    def test_research_task_rows_render_findings_and_evidence_target(self):
+        html = app.research_task_rows(
+            [
+                {
+                    "perspective": "Radiology workflow specialist",
+                    "area": "Specific roles",
+                    "question": "Which current openings fit?",
+                    "evidence_target": "Role, company, application angle.",
+                    "status": "researched",
+                    "findings": [{"name": "Clinical Application Specialist", "url": "https://example.com/job"}],
+                }
+            ],
+            "empty",
+        )
+
+        self.assertIn("Radiology workflow specialist", html)
+        self.assertIn("Role, company, application angle.", html)
+        self.assertIn('href="https://example.com/job"', html)
 
     def test_pending_sidebar_pauses_discovery_before_perspective(self):
         sidebar = app.pending_sidebar_html(

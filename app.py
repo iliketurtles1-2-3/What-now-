@@ -430,6 +430,120 @@ def live_resource_search(query: str, label: str) -> list[dict[str, str]]:
     ]
 
 
+def perspective_title(perspective: dict[str, Any], index: int) -> str:
+    return str(perspective.get("name") or f"Perspective {index + 1}").strip()
+
+
+def perspective_search_basis(perspective: dict[str, Any], fallback: str) -> str:
+    parts = [
+        str(perspective.get("name") or ""),
+        str(perspective.get("company_profile") or ""),
+    ]
+    parts.extend(str(role) for role in perspective.get("target_roles", [])[:4])
+    parts.extend(str(term) for term in perspective.get("search_terms", [])[:5])
+    cleaned = [re.sub(r"\s+", " ", part).strip() for part in parts if str(part).strip()]
+    return " ".join(dict.fromkeys(cleaned)) or fallback
+
+
+def build_research_tasks(
+    profile: dict[str, Any],
+    interview: dict[str, Any] | None,
+    strategy: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(strategy, dict):
+        return []
+    perspectives = [item for item in strategy.get("perspectives", []) if isinstance(item, dict)]
+    if not perspectives:
+        return []
+
+    fallback = workspace_search_context(profile, interview, strategy)
+    tasks: list[dict[str, Any]] = []
+    for index, perspective in enumerate(perspectives[:2]):
+        name = perspective_title(perspective, index)
+        basis = perspective_search_basis(perspective, fallback)
+        tasks.extend(
+            [
+                {
+                    "perspective": name,
+                    "area": "Companies",
+                    "question": "Which organizations could plausibly hire this person for this direction?",
+                    "evidence_target": "Company, what it works on, fit angle, mismatch risk, source.",
+                    "query": f"companies hiring {basis} Germany Europe what they do careers",
+                    "source_type": "web",
+                },
+                {
+                    "perspective": name,
+                    "area": "Specific roles",
+                    "question": "Which current openings match the direction rather than the old job title?",
+                    "evidence_target": "Role title, company, location, why relevant, application angle.",
+                    "query": f"current open jobs {basis} Germany remote Europe",
+                    "source_type": "web",
+                },
+                {
+                    "perspective": name,
+                    "area": "Learning",
+                    "question": "What concrete learning moves close the highest-value gaps?",
+                    "evidence_target": "Course, book, event, or practice path with time and fit.",
+                    "query": f"best courses books events for {basis} career skills",
+                    "source_type": "learning",
+                },
+                {
+                    "perspective": name,
+                    "area": "People and communities",
+                    "question": "Who or which communities should the user learn from before committing?",
+                    "evidence_target": "Community, operator, newsletter, podcast, or interview target.",
+                    "query": f"communities newsletters experts practitioners {basis}",
+                    "source_type": "web",
+                },
+                {
+                    "perspective": name,
+                    "area": "Proof project",
+                    "question": "What artifact could prove fit within 30 days?",
+                    "evidence_target": "Project idea, artifact format, audience, and application value.",
+                    "query": basis,
+                    "source_type": "project",
+                },
+            ]
+        )
+    return tasks
+
+
+def task_findings(
+    task: dict[str, Any],
+    profile: dict[str, Any],
+    strategy: dict[str, Any] | None,
+) -> list[dict[str, str]]:
+    source_type = task.get("source_type")
+    query = str(task.get("query") or "")
+    if source_type == "project":
+        return project_suggestions(profile, strategy)[:2]
+    if source_type == "learning":
+        findings = course_suggestions(profile, strategy)[:2]
+        if TAVILY_API_KEY or SERPAPI_API_KEY:
+            findings.extend(live_resource_search(query, "Learning resource")[:2])
+        return findings[:3]
+    if not (TAVILY_API_KEY or SERPAPI_API_KEY):
+        return []
+    return live_resource_search(query, str(task.get("area") or "Research"))[:3]
+
+
+def run_research_tasks(
+    tasks: list[dict[str, Any]],
+    profile: dict[str, Any],
+    strategy: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    researched = []
+    for task in tasks[:10]:
+        item = dict(task)
+        try:
+            item["findings"] = task_findings(task, profile, strategy)
+        except (OSError, urllib.error.URLError, json.JSONDecodeError):
+            item["findings"] = []
+        item["status"] = "researched" if item["findings"] else "queued"
+        researched.append(item)
+    return researched
+
+
 def provider_status() -> dict[str, str]:
     try:
         settings = load_settings()
@@ -490,6 +604,7 @@ def live_discovery(
 ) -> dict[str, Any]:
     context_query = workspace_search_context(profile, interview, strategy)
     discovery = {
+        "research_tasks": [],
         "companies": [],
         "jobs": [],
         "courses": [],
@@ -498,6 +613,8 @@ def live_discovery(
         "books": [],
         "projects": [],
     }
+    task_briefs = build_research_tasks(profile, interview, strategy)
+    discovery["research_tasks"] = run_research_tasks(task_briefs, profile, strategy)
     arbeitnow_jobs: list[tuple[int, dict[str, Any]]] = []
     try:
         if ARBEITNOW_BASE_URL:
@@ -603,6 +720,44 @@ def named_discovery_rows(items: Any, empty_label: str) -> str:
     return discovery_rows(items, "name", "why", empty_label)
 
 
+def research_task_rows(tasks: Any, empty_label: str) -> str:
+    rows = []
+    if isinstance(tasks, list):
+        for task in tasks[:6]:
+            if not isinstance(task, dict):
+                continue
+            findings = task.get("findings") if isinstance(task.get("findings"), list) else []
+            finding_bits = []
+            for finding in findings[:2]:
+                if not isinstance(finding, dict):
+                    continue
+                title = finding.get("name") or finding.get("title")
+                if not title:
+                    continue
+                raw_url = str(finding.get("url") or "")
+                parsed_url = urllib.parse.urlparse(raw_url)
+                if parsed_url.scheme in {"http", "https"}:
+                    finding_bits.append(
+                        f'<a href="{escape_html(raw_url)}" target="_blank" rel="noopener noreferrer">{escape_html(title)}</a>'
+                    )
+                else:
+                    finding_bits.append(escape_html(title))
+            finding_line = " · ".join(finding_bits) if finding_bits else "Queued for deeper search"
+            status = escape_html(task.get("status") or "queued")
+            rows.append(
+                f"""
+<details class="cn-research-task">
+  <summary><span>{escape_html(task.get("perspective"))} · {escape_html(task.get("area"))}</span><strong>{escape_html(task.get("question"))}</strong></summary>
+  <p>{escape_html(task.get("evidence_target"))}</p>
+  <small>{status}: {finding_line}</small>
+</details>
+"""
+            )
+    if not rows:
+        rows.append(f'<div class="cn-muted">{escape_html(empty_label)}</div>')
+    return "".join(rows)
+
+
 def pending_sidebar_html(profile: dict[str, Any]) -> str:
     role = escape_html(profile.get("current_role") or "CV profile")
     industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
@@ -682,6 +837,10 @@ def sidebar_html(
     people_rows = named_discovery_rows(discovery.get("people"), "Add Tavily to find people and communities")
     book_rows = named_discovery_rows(discovery.get("books"), "Add Tavily to find books and reading paths")
     project_rows = named_discovery_rows(discovery.get("projects"), "Side project ideas appear after analysis")
+    research_rows = research_task_rows(
+        discovery.get("research_tasks"),
+        "Research tasks appear after perspectives are generated",
+    )
     live_search_configured = bool(TAVILY_API_KEY or SERPAPI_API_KEY)
     live_note = (
         "Live data: Arbeitnow + web search"
@@ -727,14 +886,20 @@ def sidebar_html(
     <p>Derived from adaptation level, time budget, and learning budget</p>
     <div class="cn-detail">TOP FIT <span class="cn-accent-text">after workspace generation</span></div>
   </section>
+  <section class="cn-side-card cn-discovery-card cn-research-card">
+    <div class="cn-kicker">Research queue</div>
+    <h2>Evidence to collect</h2>
+    <div class="cn-discovery-list">{research_rows}</div>
+    <p class="cn-data-note">Each task is tied to a proposed perspective, not just the CV title</p>
+  </section>
   <section class="cn-side-card cn-discovery-card">
-    <div class="cn-kicker">COMPANIES</div>
+    <div class="cn-kicker">COMPANY EVIDENCE</div>
     <h2>Companies to inspect</h2>
     <div class="cn-discovery-list">{company_rows}</div>
     <p class="cn-data-note">{escape_html(live_note)}</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
-    <div class="cn-kicker">JOBS</div>
+    <div class="cn-kicker">ROLE EVIDENCE</div>
     <h2>Specific openings</h2>
     <div class="cn-discovery-list">{job_rows}</div>
     <p class="cn-data-note">Updated from current profile, answers, and generated gaps</p>
@@ -2005,6 +2170,54 @@ footer,
   text-decoration: none;
 }
 .cn-discovery-item a:hover {
+  text-decoration: underline;
+}
+.cn-research-card {
+  border-color: rgba(104,211,145,.28);
+  background: var(--cn-panel-strong);
+}
+.cn-research-task {
+  border-top: 1px solid var(--cn-line);
+  padding-top: 10px;
+}
+.cn-research-task:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.cn-research-task summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cn-research-task summary span {
+  color: var(--cn-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.cn-research-task summary strong {
+  color: var(--cn-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.cn-research-task p {
+  color: var(--cn-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 8px 0 4px;
+}
+.cn-research-task small,
+.cn-research-task a {
+  color: var(--cn-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.cn-research-task a {
+  text-decoration: none;
+}
+.cn-research-task a:hover {
   text-decoration: underline;
 }
 .cn-side-card .cn-data-note {
