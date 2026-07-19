@@ -150,6 +150,44 @@ def profile_query(profile: dict[str, Any], *, max_skills: int = 3) -> str:
     return " ".join(part for part in parts if part)
 
 
+def workspace_search_context(
+    profile: dict[str, Any],
+    interview: dict[str, Any] | None = None,
+    strategy: dict[str, Any] | None = None,
+    *,
+    max_terms: int = 10,
+) -> str:
+    terms: list[str] = []
+    terms.extend(
+        [
+            str(profile.get("current_role") or ""),
+            str(profile.get("industry") or ""),
+            str(profile.get("seniority") or ""),
+        ]
+    )
+    terms.extend(str(skill) for skill in (profile.get("skills") or [])[:5])
+    if isinstance(interview, dict):
+        terms.extend(
+            [
+                str(interview.get("adaptation_level") or ""),
+                str(interview.get("trigger") or ""),
+            ]
+        )
+    if isinstance(strategy, dict):
+        for gap in strategy.get("gaps", [])[:4]:
+            if isinstance(gap, dict):
+                terms.append(str(gap.get("gap") or ""))
+        repositioning = strategy.get("repositioning")
+        if isinstance(repositioning, dict):
+            terms.append(str(repositioning.get("linkedin_headline") or ""))
+    cleaned: list[str] = []
+    for term in terms:
+        term = re.sub(r"\s+", " ", term).strip()
+        if term and term not in cleaned:
+            cleaned.append(term)
+    return " ".join(cleaned[:max_terms])
+
+
 def result_domain(url: str) -> str:
     try:
         host = urllib.parse.urlparse(url).netloc
@@ -210,8 +248,13 @@ def search_live_web(query: str, *, topic: str = "general", max_results: int = 3)
     return []
 
 
-def ranked_arbeitnow_jobs(profile: dict[str, Any], *, limit: int = 50) -> list[tuple[int, dict[str, Any]]]:
-    query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
+def ranked_arbeitnow_jobs(
+    profile: dict[str, Any],
+    *,
+    context_query: str | None = None,
+    limit: int = 50,
+) -> list[tuple[int, dict[str, Any]]]:
+    query = context_query or profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
     data = request_json(ARBEITNOW_BASE_URL)
     keywords = keyword_set(query)
     ranked_items = []
@@ -235,14 +278,19 @@ def ranked_arbeitnow_jobs(profile: dict[str, Any], *, limit: int = 50) -> list[t
 def interesting_companies(
     profile: dict[str, Any],
     arbeitnow_jobs: list[tuple[int, dict[str, Any]]] | None = None,
+    *,
+    context_query: str | None = None,
 ) -> list[dict[str, str]]:
-    query = f"hiring companies Germany {profile_query(profile)}"
+    query = (
+        f"companies hiring for {context_query or profile_query(profile)} Germany Europe "
+        "what the company works on career fit"
+    )
     results = search_live_web(query, max_results=3)
     if results:
         return [
             {
                 "name": item.get("title") or result_domain(item.get("url", "")),
-                "why": item.get("snippet") or item.get("url") or "Live search result",
+                "why": item.get("snippet") or item.get("url") or "Company profile from live search",
                 "url": item.get("url", ""),
                 "source": item.get("source", ""),
             }
@@ -275,8 +323,10 @@ def interesting_companies(
 def interesting_jobs(
     profile: dict[str, Any],
     arbeitnow_jobs: list[tuple[int, dict[str, Any]]] | None = None,
+    *,
+    context_query: str | None = None,
 ) -> list[dict[str, str]]:
-    query = profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
+    query = context_query or profile_query(profile, max_skills=2) or str(profile.get("current_role") or "")
     jobs: list[dict[str, str]] = []
     for score, item in (arbeitnow_jobs or []):
         if score == 0:
@@ -301,7 +351,7 @@ def interesting_jobs(
     if jobs:
         return jobs
 
-    results = search_live_web(f'site:linkedin.com/jobs OR site:indeed.com "{query}" Germany', max_results=3)
+    results = search_live_web(f'specific open jobs "{query}" Germany remote Europe', max_results=3)
     return [
         {
             "title": item.get("title") or "Live job result",
@@ -314,9 +364,12 @@ def interesting_jobs(
     ]
 
 
-def course_suggestions(profile: dict[str, Any]) -> list[dict[str, str]]:
+def course_suggestions(profile: dict[str, Any], strategy: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    targets: Any = profile.get("skills") or []
+    if isinstance(strategy, dict) and strategy.get("gaps"):
+        targets = strategy.get("gaps")
     result = match_courses(
-        profile.get("skills") or [],
+        targets,
         language="English",
         limit=3,
     )
@@ -328,6 +381,41 @@ def course_suggestions(profile: dict[str, Any]) -> list[dict[str, str]]:
             "source": item["course"]["provider"],
         }
         for item in result["recommendations"]
+    ]
+
+
+def project_suggestions(profile: dict[str, Any], strategy: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    gaps = strategy.get("gaps", []) if isinstance(strategy, dict) else []
+    gap_terms = ", ".join(str(gap.get("gap") or "") for gap in gaps[:3] if isinstance(gap, dict))
+    base = workspace_search_context(profile, strategy=strategy)
+    suggestions = [
+        {
+            "name": "Proof project",
+            "why": f"Build a small public artifact around {gap_terms or base}: a workflow map, before/after case, or decision aid.",
+            "url": "",
+            "source": "Workspace",
+        },
+        {
+            "name": "Work sample",
+            "why": "Turn one real task from your role into a portfolio-quality example with clear constraints, tradeoffs, and outcome.",
+            "url": "",
+            "source": "Workspace",
+        },
+    ]
+    return suggestions
+
+
+def live_resource_search(query: str, label: str) -> list[dict[str, str]]:
+    results = search_live_web(query, max_results=3)
+    return [
+        {
+            "name": item.get("title") or result_domain(item.get("url", "")) or label,
+            "why": item.get("snippet") or item.get("url") or "Live search result",
+            "url": item.get("url", ""),
+            "source": item.get("source", ""),
+        }
+        for item in results
+        if item.get("title") or item.get("url")
     ]
 
 
@@ -384,27 +472,49 @@ def app_header_html() -> str:
 """
 
 
-def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
+def live_discovery(
+    profile: dict[str, Any],
+    interview: dict[str, Any] | None = None,
+    strategy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context_query = workspace_search_context(profile, interview, strategy)
     discovery = {
         "companies": [],
         "jobs": [],
         "courses": [],
+        "events": [],
+        "people": [],
+        "books": [],
+        "projects": [],
     }
     arbeitnow_jobs: list[tuple[int, dict[str, Any]]] = []
     try:
         if ARBEITNOW_BASE_URL:
-            arbeitnow_jobs = ranked_arbeitnow_jobs(profile)
+            arbeitnow_jobs = ranked_arbeitnow_jobs(profile, context_query=context_query)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         arbeitnow_jobs = []
     try:
-        discovery["companies"] = interesting_companies(profile, arbeitnow_jobs)
+        discovery["companies"] = interesting_companies(profile, arbeitnow_jobs, context_query=context_query)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["companies"] = []
     try:
-        discovery["jobs"] = interesting_jobs(profile, arbeitnow_jobs)
+        discovery["jobs"] = interesting_jobs(profile, arbeitnow_jobs, context_query=context_query)
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         discovery["jobs"] = []
-    discovery["courses"] = course_suggestions(profile)
+    try:
+        discovery["events"] = live_resource_search(f"events meetups conferences {context_query} Germany Europe", "Event")
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["events"] = []
+    try:
+        discovery["people"] = live_resource_search(f"people communities newsletters experts {context_query}", "People")
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["people"] = []
+    try:
+        discovery["books"] = live_resource_search(f"best books for {context_query} career skill development", "Book")
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        discovery["books"] = []
+    discovery["courses"] = course_suggestions(profile, strategy)
+    discovery["projects"] = project_suggestions(profile, strategy)
     return discovery
 
 
@@ -478,6 +588,10 @@ def discovery_rows(
     return "".join(rows)
 
 
+def named_discovery_rows(items: Any, empty_label: str) -> str:
+    return discovery_rows(items, "name", "why", empty_label)
+
+
 def sidebar_html(
     profile: dict[str, Any],
     discovery: dict[str, Any] | None = None,
@@ -520,8 +634,12 @@ def sidebar_html(
         discovery.get("courses"),
         "name",
         "why",
-        "Course matches will appear here after the catalog is connected",
+        "Course matches will update after skills and gaps are known",
     )
+    event_rows = named_discovery_rows(discovery.get("events"), "Add Tavily to find relevant events")
+    people_rows = named_discovery_rows(discovery.get("people"), "Add Tavily to find people and communities")
+    book_rows = named_discovery_rows(discovery.get("books"), "Add Tavily to find books and reading paths")
+    project_rows = named_discovery_rows(discovery.get("projects"), "Side project ideas appear after analysis")
     live_search_configured = bool(TAVILY_API_KEY or SERPAPI_API_KEY)
     live_note = (
         "Live data: Arbeitnow + web search"
@@ -569,21 +687,45 @@ def sidebar_html(
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">COMPANIES</div>
-    <h2>Relevant companies</h2>
+    <h2>Companies to inspect</h2>
     <div class="cn-discovery-list">{company_rows}</div>
     <p class="cn-data-note">{escape_html(live_note)}</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">JOBS</div>
-    <h2>Relevant roles</h2>
+    <h2>Specific openings</h2>
     <div class="cn-discovery-list">{job_rows}</div>
-    <p class="cn-data-note">Live jobs via Arbeitnow, fallback via web search</p>
+    <p class="cn-data-note">Updated from current profile, answers, and generated gaps</p>
   </section>
   <section class="cn-side-card cn-discovery-card">
     <div class="cn-kicker">COURSES</div>
-    <h2>Course direction</h2>
+    <h2>Skill courses</h2>
     <div class="cn-discovery-list">{course_rows}</div>
-    <p class="cn-data-note">Matched from the verified local course catalog</p>
+    <p class="cn-data-note">Matched from the verified local course catalog: skills first, then gaps</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">PROJECTS</div>
+    <h2>Proof work</h2>
+    <div class="cn-discovery-list">{project_rows}</div>
+    <p class="cn-data-note">Artifacts that prove judgment, not tool fandom</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">EVENTS</div>
+    <h2>Rooms to enter</h2>
+    <div class="cn-discovery-list">{event_rows}</div>
+    <p class="cn-data-note">Live web search when Tavily or SerpAPI is configured</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">PEOPLE</div>
+    <h2>People to learn from</h2>
+    <div class="cn-discovery-list">{people_rows}</div>
+    <p class="cn-data-note">Communities, newsletters, operators, and practitioners</p>
+  </section>
+  <section class="cn-side-card cn-discovery-card">
+    <div class="cn-kicker">BOOKS</div>
+    <h2>Reading path</h2>
+    <div class="cn-discovery-list">{book_rows}</div>
+    <p class="cn-data-note">Broader skill gaps, not only technical tooling</p>
   </section>
 </aside>
 """
@@ -958,39 +1100,50 @@ def narrative_html(repositioning: Any, closing_note: str) -> str:
 def render_workspace_html(data: dict[str, Any]) -> str:
     return f"""
 <section class="cn-workspace">
-  <nav class="cn-workspace-tabs" aria-label="Workspace sections">
+  <nav class="cn-workspace-tabs" aria-label="Workspace windows">
     <a href="#exposure">Exposure</a>
     <a href="#gaps">Gaps</a>
-    <a href="#plan">100 days</a>
+    <a href="#plan">Plan</a>
     <a href="#roadmap">Roadmap</a>
     <a href="#courses">Courses</a>
     <a href="#narrative">Narrative</a>
+    <a href="#feedback">Feedback</a>
   </nav>
-  <section id="exposure" class="cn-work-section">
-    <div class="cn-section-heading"><span>01</span><h2>Where AI changes the work</h2></div>
-    <p>{escape_html(data.get("exposure_summary") or "")}</p>
-    <div class="cn-card-grid">{exposure_cards_html(data.get("exposure"))}</div>
-  </section>
-  <section id="gaps" class="cn-work-section">
-    <div class="cn-section-heading"><span>02</span><h2>Development gaps</h2></div>
-    <div class="cn-card-grid">{gaps_html(data.get("gaps"))}</div>
-  </section>
-  <section id="plan" class="cn-work-section">
-    <div class="cn-section-heading"><span>03</span><h2>Your first 100 days</h2></div>
-    <div class="cn-stack">{plan_100_html(data.get("plan_100"))}</div>
-  </section>
-  <section id="roadmap" class="cn-work-section">
-    <div class="cn-section-heading"><span>04</span><h2>365-day roadmap</h2></div>
-    <div class="cn-card-grid">{roadmap_html(data.get("plan_365"), data.get("decision_gates"))}</div>
-  </section>
-  <section id="courses" class="cn-work-section">
-    <div class="cn-section-heading"><span>05</span><h2>Courses and resources</h2></div>
-    <div class="cn-stack">{course_cards_html(data.get("resources"), data.get("course_fallbacks"))}</div>
-  </section>
-  <section id="narrative" class="cn-work-section">
-    <div class="cn-section-heading"><span>06</span><h2>Narrative</h2></div>
-    {narrative_html(data.get("repositioning"), data.get("closing_note") or "")}
-  </section>
+  <div class="cn-window-board">
+    <section id="exposure" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>01</span><h2>Where AI changes the work</h2></div>
+      <p>{escape_html(data.get("exposure_summary") or "")}</p>
+      <div class="cn-card-grid">{exposure_cards_html(data.get("exposure"))}</div>
+    </section>
+    <section id="gaps" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>02</span><h2>Development gaps</h2></div>
+      <div class="cn-card-grid">{gaps_html(data.get("gaps"))}</div>
+    </section>
+    <section id="plan" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>03</span><h2>Your first 100 days</h2></div>
+      <div class="cn-stack">{plan_100_html(data.get("plan_100"))}</div>
+    </section>
+    <section id="roadmap" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>04</span><h2>365-day roadmap</h2></div>
+      <div class="cn-card-grid">{roadmap_html(data.get("plan_365"), data.get("decision_gates"))}</div>
+    </section>
+    <section id="courses" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>05</span><h2>Courses and resources</h2></div>
+      <div class="cn-stack">{course_cards_html(data.get("resources"), data.get("course_fallbacks"))}</div>
+    </section>
+    <section id="narrative" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>06</span><h2>Narrative</h2></div>
+      {narrative_html(data.get("repositioning"), data.get("closing_note") or "")}
+    </section>
+    <section id="feedback" class="cn-work-section cn-window">
+      <div class="cn-window-bar"><span>07</span><h2>What to challenge next</h2></div>
+      <div class="cn-feedback-grid">
+        <article class="cn-work-card"><h3>This is wrong</h3><p>Mark assumptions, missing context, or recommendations that do not fit your real constraints.</p></article>
+        <article class="cn-work-card"><h3>More like this</h3><p>Choose the companies, roles, projects, or learning directions that feel promising and search deeper.</p></article>
+        <article class="cn-work-card"><h3>Too generic</h3><p>Force the next pass to anchor every suggestion in a CV fact, target company, event, project, or skill gap.</p></article>
+      </div>
+    </section>
+  </div>
 </section>
 """
 
@@ -1173,6 +1326,7 @@ def create_report(
             time_budget=time_budget,
             adaptation=adaptation,
         )
+        discovery = live_discovery(profile, interview, result)
         report = render_report(result)
         download_path = write_report_file(report)
         return (
@@ -1180,18 +1334,20 @@ def create_report(
             gr.update(visible=True),
             render_workspace_html(result),
             download_path,
+            sidebar_html(profile, discovery),
+            discovery,
             "",
         )
     except ValueError as exc:
         message = str(exc) if str(exc) != CV_ERROR else CV_ERROR
-        return (gr.update(visible=True), gr.update(visible=False), "", None, message)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, gr.update(), gr.update(), message)
     except ConfigError as exc:
         print(exc)
-        return (gr.update(visible=True), gr.update(visible=False), "", None, CONFIG_ERROR)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, gr.update(), gr.update(), CONFIG_ERROR)
     except Exception:
         print("create_report failed")
         traceback.print_exc()
-        return (gr.update(visible=True), gr.update(visible=False), "", None, API_ERROR)
+        return (gr.update(visible=True), gr.update(visible=False), "", None, gr.update(), gr.update(), API_ERROR)
 
 
 def reset_app():
@@ -1779,19 +1935,36 @@ footer,
 .cn-workspace-tabs a:hover {
   border-color: rgba(91,224,138,.45);
 }
+.cn-window-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
 .cn-work-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-top: 4px;
   scroll-margin-top: 54px;
 }
-.cn-section-heading {
+.cn-window {
+  min-height: 220px;
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(5,8,6,.46);
+  box-shadow: 0 16px 34px rgba(0,0,0,.18);
+}
+.cn-window-bar {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 10px;
+  margin: -4px -4px 10px;
+  padding: 6px 8px 10px;
+  border-bottom: 1px solid var(--cn-line);
 }
-.cn-section-heading span,
+.cn-window-bar span,
 .cn-card-topline span,
 .cn-work-card summary span {
   color: var(--cn-muted);
@@ -1799,10 +1972,10 @@ footer,
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.cn-section-heading h2 {
+.cn-window-bar h2 {
   margin: 0;
   color: var(--cn-primary);
-  font-size: 20px;
+  font-size: 16px;
 }
 .cn-card-grid {
   display: grid;
@@ -1881,6 +2054,11 @@ footer,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+.cn-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 .cn-outcome {
   color: var(--cn-soft);
@@ -1966,7 +2144,9 @@ button.primary {
   }
   .cn-card-grid,
   .cn-course-grid,
-  .cn-two-column {
+  .cn-two-column,
+  .cn-feedback-grid,
+  .cn-window-board {
     grid-template-columns: 1fr;
   }
   .cn-shell {
@@ -2102,7 +2282,15 @@ with gr.Blocks(title=APP_NAME) as demo:
     report_button.click(
         fn=create_report,
         inputs=[profile_state, adaptation, time_budget, learning_budget, trigger],
-        outputs=[interaction_panel, report_panel, report_markdown, download_button, interview_error],
+        outputs=[
+            interaction_panel,
+            report_panel,
+            report_markdown,
+            download_button,
+            live_sidebar,
+            discovery_state,
+            interview_error,
+        ],
         api_name=False,
         show_progress="full",
         scroll_to_output=False,

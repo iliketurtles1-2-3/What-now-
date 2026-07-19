@@ -160,6 +160,38 @@ class AppCoreTests(unittest.TestCase):
         if not (app.TAVILY_API_KEY or app.SERPAPI_API_KEY):
             self.assertIn("web search not configured", sidebar)
 
+    def test_sidebar_includes_broader_discovery_categories(self):
+        sidebar = app.sidebar_html(
+            {"current_role": "Coordinator", "skills": ["stakeholder management"]},
+            {
+                "companies": [{"name": "Climate Co", "why": "Builds grid software"}],
+                "jobs": [{"title": "Partnerships Associate", "why": "Berlin"}],
+                "courses": [{"name": "Negotiation", "why": "Gap fit"}],
+                "events": [{"name": "Energy Meetup", "why": "Meet operators"}],
+                "people": [{"name": "Operator newsletter", "why": "Practical examples"}],
+                "books": [{"name": "The Mom Test", "why": "Customer discovery"}],
+                "projects": [{"name": "Proof project", "why": "Show judgment"}],
+            },
+        )
+
+        self.assertIn("Companies to inspect", sidebar)
+        self.assertIn("Specific openings", sidebar)
+        self.assertIn("Rooms to enter", sidebar)
+        self.assertIn("People to learn from", sidebar)
+        self.assertIn("Reading path", sidebar)
+        self.assertIn("Proof work", sidebar)
+
+    def test_workspace_context_uses_interview_and_generated_gaps(self):
+        query = app.workspace_search_context(
+            {"current_role": "Marketing Manager", "industry": "Cleantech", "skills": ["partnerships"]},
+            {"adaptation_level": "Develop", "trigger": "find climate roles"},
+            {"gaps": [{"gap": "commercial strategy"}]},
+        )
+
+        self.assertIn("Marketing Manager", query)
+        self.assertIn("find climate roles", query)
+        self.assertIn("commercial strategy", query)
+
     def test_workspace_renderer_uses_interactive_sections_not_markdown_document(self):
         html = app.render_workspace_html(
             {
@@ -176,8 +208,10 @@ class AppCoreTests(unittest.TestCase):
         )
 
         self.assertIn('class="cn-workspace"', html)
+        self.assertIn('class="cn-window-board"', html)
         self.assertIn("<details", html)
         self.assertIn("Workflow design", html)
+        self.assertIn("What to challenge next", html)
         self.assertNotIn("# AI Career Workspace", html)
 
     def test_header_surfaces_settings_account_and_search_status(self):
