@@ -31,6 +31,8 @@ and the framework redesign do not create competing backlogs.
 - [ ] N9: rename `rating_icon` and simplify model-response repair logging.
 - [ ] N11: remove the unused discovery input from strategy generation. Optional,
       noisy discovery data must not influence the core recommendation contract.
+- [ ] Move `css` from the deprecated Gradio `Blocks` constructor argument to
+      `launch()` while preserving test imports and the responsive layout.
 
 ### Course-integrity gate
 
@@ -71,10 +73,11 @@ The v0.1 release is complete when a user can:
 
 ### P0 — Stabilize the current branch
 
-- [ ] Finish or pause the other Codex instance's active `app.py` work.
-- [ ] Review the uncommitted diff and remove generated `__pycache__` files.
-- [ ] Commit the intended UI/discovery changes as one recoverable checkpoint.
-- [ ] Confirm `python app.py` starts with the pinned dependencies.
+- [x] Account for the other Codex instance's work without absorbing hidden
+      `app.py` changes.
+- [x] Review the uncommitted state and keep local agent/cache files untracked.
+- [x] Commit and push a recoverable baseline checkpoint.
+- [x] Confirm `python app.py` starts with the pinned dependencies on Python 3.12.
 - [ ] Run one pasted-CV happy path with OpenRouter and GLM 5.2.
 
 Acceptance:
