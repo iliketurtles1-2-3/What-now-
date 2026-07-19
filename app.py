@@ -13,17 +13,14 @@ from typing import Any
 
 import gradio as gr
 
+from config import ConfigError
 from courses.matcher import match_courses
+from llm import call_json as llm_call_json
+from llm import call_model as llm_call_model
+from llm import parse_json_response
+from prompts import load_prompt
 
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
-OPENAI_API_MODE = os.getenv("OPENAI_API_MODE", "responses").strip().lower()
-OPENAI_JSON_MODE = os.getenv("OPENAI_JSON_MODE", "").strip().lower() in {"1", "true", "yes"}
-DEFAULT_MODELS = {
-    "anthropic": "claude-sonnet-4-6",
-    "openai": "gpt-4.1",
-}
-MODEL = os.getenv("LLM_MODEL", DEFAULT_MODELS.get(LLM_PROVIDER, "claude-sonnet-4-6"))
 MAX_PDF_BYTES = 10 * 1024 * 1024
 CV_ERROR = "I could not read the CV. Please upload a PDF or paste at least 300 characters of CV text."
 API_ERROR = "The analysis is not available right now. Please try again in a minute."
@@ -45,224 +42,21 @@ ADAPTATION_OPTIONS = [
 TIME_OPTIONS = ["< 2 hours/week", "2-5 hours/week", "5-10 hours/week", "> 10 hours/week"]
 BUDGET_OPTIONS = ["0 EUR (free only)", "up to 50 EUR/month", "over 50 EUR/month"]
 
-PROMPT_1 = """
-You are a career analyst specialized in how AI changes professional work. You receive a CV. Extract a structured profile and write three concise first observations.
-
-Reply ONLY with valid JSON, exactly in this schema:
-{
-  "profile": {
-    "current_role": string,
-    "seniority": "junior" | "mid" | "senior" | "lead",
-    "industry": string,
-    "years_experience": number,
-    "roles": [{"title": string, "duration": string, "key_tasks": [string, ...]}],
-    "skills": [string, ...],
-    "education": [string, ...],
-    "ai_tool_signals": [string, ...],
-    "languages": [string, ...]
-  },
-  "teaser": [string, string, string]
-}
-
-Rules for the teaser observations:
-- Each observation is 1-2 sentences, in English, speaking directly to the user as "you".
-- Observation 1: the profile's strongest asset in the AI era.
-- Observation 2: one concrete, honest exposure area, meaning tasks likely to change strongly through AI, with reasoning and without fearmongering.
-- Observation 3: one surprising or non-obvious opportunity that follows from the profile.
-- Be specific: refer to concrete roles, tasks, or experiences from the CV, never generic career advice.
-- "ai_tool_signals": all hints of existing AI tool use; empty list if none.
-""".strip()
-
-PROMPT_2 = """
-You are a career strategist for the AI economy. You receive a structured professional profile and answers from a short interview. Create a personal in-app career workspace.
-
-PRINCIPLES:
-- Write in English and address the user directly as "you". Be concrete: every statement must visibly depend on THIS profile.
-- Be honest about uncertainty. Treat AI exposure as change pressure, not a replacement prophecy, and explain each assessment.
-- COURSE RULE, critical: recommend only real, broadly known providers such as Coursera, DeepLearning.AI, fast.ai, Google Skillshop, LinkedIn Learning, Udemy, edX, Maven, local chambers of commerce, or Meetup. Never invent course names. If you are not sure a specific course exists, write "Search for: [course type description]" instead.
-- The adaptation level controls depth: Optimize = small improvements in the current role; Develop = adjacent roles and one portfolio project; Reinvent = a full bridge including application phase.
-- Time and learning budget are hard constraints. Recommend nothing that exceeds them. If budget is "0 EUR", include only free resources.
-
-Reply ONLY with valid JSON, exactly in this schema:
-{
-  "exposure": [
-    {"task": string, "rating": "green" | "yellow" | "red", "reasoning": string}
-  ],
-  "exposure_summary": string,
-  "gaps": [
-    {"gap": string, "why_it_matters": string}
-  ],
-  "plan_100": [
-    {"weeks": string, "focus": string, "actions": [string, ...], "outcome": string}
-  ],
-  "plan_365": [
-    {"quarter": "Q1" | "Q2" | "Q3" | "Q4", "theme": string, "milestones": [string, ...]}
-  ],
-  "decision_gates": [
-    {"when": string, "question": string, "if_yes": string, "if_no": string}
-  ],
-  "resources": [
-    {"gap": string, "free": [{"name": string, "format": "Course" | "Project" | "Community" | "On-the-job", "time_cost": string}], "paid": [{"name": string, "format": string, "cost_estimate": string, "time_cost": string}]}
-  ],
-  "repositioning": {
-    "cv_bullets": [string, string, string],
-    "linkedin_headline": string
-  },
-  "closing_note": string
-}
-
-QUANTITY RULES:
-- exposure: 5-8 tasks from the real profile, each with one-sentence reasoning.
-- gaps: exactly 3, but Optimize may use 2 if that is more honest.
-- plan_100: 3-4 blocks in week granularity, e.g. "Weeks 1-2", ending with a concrete artifact.
-- plan_365: 4 quarters; Q1 references the 100-day plan.
-- decision_gates: exactly 2.
-- resources: at least 1 free course/project option per gap; paid only if budget is above 0 EUR.
-- cv_bullets: rewritten bullets based on real profile experiences, tone matched to the adaptation level.
-- closing_note: 2-3 sentences, grounded and motivating, no fluff.
-""".strip()
-
-
-class ConfigError(RuntimeError):
-    pass
-
-
-def strip_json_fences(text: str) -> str:
-    clean = text.strip()
-    clean = re.sub(r"^```(?:json)?\s*", "", clean, flags=re.IGNORECASE)
-    clean = re.sub(r"\s*```$", "", clean)
-    return clean.strip()
-
-
-def extract_first_json_object(text: str) -> str:
-    clean = strip_json_fences(text)
-    if not clean:
-        return clean
-    start = clean.find("{")
-    if start == -1:
-        return clean
-
-    depth = 0
-    in_string = False
-    escaped = False
-    for index, char in enumerate(clean[start:], start=start):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return clean[start : index + 1]
-    return clean
-
-
-def parse_json_response(text: str) -> dict[str, Any]:
-    return json.loads(extract_first_json_object(text))
-
-
-def extract_text_from_response(response: Any) -> str:
-    chunks = []
-    for block in response.content:
-        if getattr(block, "type", None) == "text":
-            chunks.append(block.text)
-    return "\n".join(chunks).strip()
-
-
-def anthropic_client() -> Any:
-    from anthropic import Anthropic
-
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise ConfigError("ANTHROPIC_API_KEY is missing for provider 'anthropic'.")
-    return Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=120.0)
-
-
-def openai_client() -> Any:
-    from openai import OpenAI
-
-    if not os.getenv("OPENAI_API_KEY"):
-        raise ConfigError("OPENAI_API_KEY is missing for provider 'openai'.")
-    kwargs = {"api_key": os.environ["OPENAI_API_KEY"], "timeout": 120.0}
-    if os.getenv("OPENAI_BASE_URL"):
-        kwargs["base_url"] = os.environ["OPENAI_BASE_URL"]
-    return OpenAI(**kwargs)
-
-
-def call_anthropic(system_prompt: str, user_content: Any, max_tokens: int) -> str:
-    response = anthropic_client().messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    return extract_text_from_response(response)
-
-
-def call_openai(system_prompt: str, user_content: Any, max_tokens: int) -> str:
-    if OPENAI_API_MODE == "chat":
-        if not isinstance(user_content, str):
-            raise ValueError(CV_ERROR)
-        request_args = {
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            "max_tokens": max_tokens,
-        }
-        if OPENAI_JSON_MODE:
-            request_args["response_format"] = {"type": "json_object"}
-        response = openai_client().chat.completions.create(**request_args)
-        return response.choices[0].message.content or ""
-
-    if OPENAI_API_MODE != "responses":
-        raise RuntimeError(f"Unbekannter OPENAI_API_MODE: {OPENAI_API_MODE}")
-
-    content = normalize_openai_responses_content(user_content)
-    response = openai_client().responses.create(
-        model=MODEL,
-        instructions=system_prompt,
-        input=[{"role": "user", "content": content}],
-        max_output_tokens=max_tokens,
-    )
-    return getattr(response, "output_text", "") or ""
+PROMPT_1 = load_prompt("profile", "legacy-v1")
+PROMPT_2 = load_prompt("strategy", "legacy-v1")
 
 
 def call_model(system_prompt: str, user_content: Any, max_tokens: int) -> str:
-    if LLM_PROVIDER == "anthropic":
-        return call_anthropic(system_prompt, user_content, max_tokens)
-    if LLM_PROVIDER == "openai":
-        return call_openai(system_prompt, user_content, max_tokens)
-    raise RuntimeError(f"Unbekannter LLM_PROVIDER: {LLM_PROVIDER}")
+    return llm_call_model(system_prompt, user_content, max_tokens)
 
 
 def call_json(system_prompt: str, user_content: Any, max_tokens: int) -> dict[str, Any]:
-    first_response = call_model(system_prompt, user_content, max_tokens)
-    try:
-        return parse_json_response(first_response)
-    except json.JSONDecodeError as first_error:
-        repair_prompt = (
-            f"{system_prompt}\n\n"
-            "Your previous response was not valid JSON. Return only valid JSON matching the schema."
-        )
-        try:
-            return parse_json_response(call_model(repair_prompt, user_content, max_tokens))
-        except json.JSONDecodeError as repair_error:
-            raise ValueError(JSON_RESPONSE_ERROR) from repair_error
-        except Exception:
-            raise
-        finally:
-            if first_error:
-                print(f"Initial JSON parse failed: {first_error}")
+    return llm_call_json(
+        system_prompt,
+        user_content,
+        max_tokens,
+        model_call=call_model,
+    )
 
 
 def file_path(uploaded_file: Any) -> str | None:
@@ -271,26 +65,6 @@ def file_path(uploaded_file: Any) -> str | None:
     if isinstance(uploaded_file, str):
         return uploaded_file
     return getattr(uploaded_file, "name", None) or getattr(uploaded_file, "path", None)
-
-
-def normalize_openai_responses_content(user_content: Any) -> list[dict[str, Any]]:
-    if isinstance(user_content, str):
-        return [{"type": "input_text", "text": user_content}]
-
-    content = []
-    for item in user_content:
-        if item.get("type") == "document":
-            source = item.get("source", {})
-            content.append(
-                {
-                    "type": "input_file",
-                    "filename": "lebenslauf.pdf",
-                    "file_data": f"data:{source.get('media_type', 'application/pdf')};base64,{source.get('data', '')}",
-                }
-            )
-        elif item.get("type") == "text":
-            content.append({"type": "input_text", "text": item.get("text", "")})
-    return content
 
 
 def build_cv_content(uploaded_file: Any, cv_text: str | None) -> Any:
