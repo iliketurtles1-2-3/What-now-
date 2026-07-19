@@ -75,9 +75,17 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.server_port, 7860)
 
     def test_prompt_loader_uses_versioned_files_and_rejects_traversal(self):
-        self.assertIn("structured profile", load_prompt("profile", "legacy-v1"))
+        self.assertIn("evidence-aware profile", load_prompt("profile", "v2"))
         with self.assertRaises(ValueError):
-            load_prompt("../profile", "legacy-v1")
+            load_prompt("../profile", "v2")
+
+    def test_v2_strategy_prompt_blocks_generic_ai_career_advice(self):
+        prompt = load_prompt("strategy", "v2")
+
+        self.assertIn("Do not default to", prompt)
+        self.assertIn("At most one perspective may be primarily", prompt)
+        self.assertIn("Do not recommend only courses", prompt)
+        self.assertIn("search intents", prompt)
 
 
 class ProviderTests(unittest.TestCase):

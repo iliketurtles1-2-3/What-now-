@@ -34,11 +34,11 @@ and the framework redesign do not create competing backlogs.
 - [x] Move `css` from the deprecated Gradio `Blocks` constructor argument to
       `launch()` while preserving test imports and the responsive layout.
 
-### Course-integrity gate
+### Learning-research gate
 
-- [x] N3: discard model-generated course names in all cases.
-- [x] N4: preserve original skill-gap labels in course presentation.
-- [x] N1: add numeric course costs and enforce non-zero budget constraints.
+- [x] N3: discard model-generated named resources and URLs in all cases.
+- [x] N4: preserve original skill-gap labels in learning presentation.
+- [x] N1: carry budget and time constraints into learning search intents.
 - [x] N1: treat "over X" as an uncapped budget tier.
 - [x] N5: replace the sidebar course area with dynamic learning-resource research.
 - [x] N10: remove catalog URL verification; live resources are checked through research tasks.
@@ -64,8 +64,8 @@ The v0.1 release is complete when a user can:
 1. Paste or upload a CV from a compact English welcome screen.
 2. Receive three specific, evidence-based observations.
 3. Answer the four fixed career questions.
-4. Navigate an in-app assessment, roadmap, course plan, and positioning area.
-5. Save recommended courses to their current-session development plan.
+4. Navigate an in-app assessment, roadmap, learning plan, and positioning area.
+5. Save recommended learning resources or proof projects to their current-session development plan.
 6. Print the result cleanly or save it as PDF through the browser.
 7. Complete the workflow even when optional discovery services are unavailable.
 
@@ -208,7 +208,7 @@ Acceptance:
 
 ### P9 — Test and release
 
-- [ ] Add schema, course-filtering, budget, and rendering tests.
+- [ ] Add schema, learning-resource, budget, and rendering tests.
 - [ ] Test pasted CV and PDF input.
 - [ ] Test missing key, timeout, malformed JSON, short CV, and non-CV input.
 - [ ] Test desktop and mobile layouts.

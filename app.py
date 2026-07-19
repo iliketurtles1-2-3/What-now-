@@ -42,8 +42,8 @@ ADAPTATION_OPTIONS = [
 TIME_OPTIONS = ["< 2 hours/week", "2-5 hours/week", "5-10 hours/week", "> 10 hours/week"]
 BUDGET_OPTIONS = ["0 EUR (free only)", "up to 50 EUR/month", "over 50 EUR/month"]
 
-PROMPT_1 = load_prompt("profile", "legacy-v1")
-PROMPT_2 = load_prompt("strategy", "legacy-v1")
+PROMPT_1 = load_prompt("profile", "v2")
+PROMPT_2 = load_prompt("strategy", "v2")
 
 
 def call_model(system_prompt: str, user_content: Any, max_tokens: int) -> str:
@@ -1125,7 +1125,7 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
       </div>
       <div class="cn-messages">
         <div class="cn-assistant">
-          Your CV is parsed. First, check what I understood. Then answer the fields below so the app can propose directions before it searches jobs, companies, courses, or people.
+          Your CV is parsed. First, check what I understood. Then answer the fields below so the app can propose directions before it searches jobs, companies, learning resources, or people.
           <div class="cn-chips">
             <span>Clarify direction</span>
             <span>Test perspectives</span>
@@ -1143,7 +1143,7 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
             <summary><span>Answer below</span><strong>Questions to answer before discovery</strong></summary>
             <ol>{question_items}</ol>
           </details>
-          <div class="cn-next-step">Next: answer the short interview below. The app will propose perspectives before it searches roles, companies, or courses.</div>
+          <div class="cn-next-step">Next: answer the short interview below. The app will propose perspectives before it searches roles, companies, or learning resources.</div>
         </div>
       </div>
     </section>
@@ -1194,7 +1194,7 @@ def render_report(data: dict[str, Any]) -> str:
         lines.append(f"  - If no: {gate.get('if_no', '')}")
     lines.append("")
 
-    lines += ["## 5. Courses and learning resources", ""]
+    lines += ["## 5. Learning resources", ""]
     for resource in data.get("resources", []):
         lines.append(f"**{resource.get('gap', '')}**")
         lines.append("**Free:**")
@@ -1354,14 +1354,14 @@ def course_cards_html(resources: Any, fallbacks: Any) -> str:
                     parsed_url = urllib.parse.urlparse(raw_url)
                     href = escape_html(raw_url) if parsed_url.scheme in {"http", "https"} else ""
                     link = (
-                        f'<a href="{href}" target="_blank" rel="noopener noreferrer">Open course</a>'
+                        f'<a href="{href}" target="_blank" rel="noopener noreferrer">Open resource</a>'
                         if href
                         else '<span class="cn-muted">No link</span>'
                     )
                     items.append(
                         f"""
 <article class="cn-course-card">
-  <h4>{escape_html(item.get("name") or "Course")}</h4>
+  <h4>{escape_html(item.get("name") or "Learning resource")}</h4>
   <p>{escape_html(item.get("provider") or "")} · {escape_html(item.get("format") or "")} · {escape_html(item.get("time_cost") or "")}</p>
   <small>{escape_html(item.get("cost_estimate") or bucket.title())}</small>
   {link}
@@ -1371,20 +1371,20 @@ def course_cards_html(resources: Any, fallbacks: Any) -> str:
             cards.append(
                 f"""
 <details class="cn-work-card cn-resource-card" open>
-  <summary><span>Course path</span><strong>{escape_html(resource.get("gap") or "Learning gap")}</strong></summary>
-  <div class="cn-course-grid">{''.join(items) or '<p class="cn-muted">No verified courses for this gap.</p>'}</div>
+  <summary><span>Learning path</span><strong>{escape_html(resource.get("gap") or "Learning gap")}</strong></summary>
+  <div class="cn-course-grid">{''.join(items) or '<p class="cn-muted">No learning resources for this gap yet.</p>'}</div>
 </details>
 """
             )
     if isinstance(fallbacks, list) and fallbacks:
         fallback_items = "".join(
-            f"<li>{escape_html(item.get('search_phrase') or item.get('gap') or 'Research course')}</li>"
+            f"<li>{escape_html(item.get('search_phrase') or item.get('gap') or 'Research learning resource')}</li>"
             for item in fallbacks
             if isinstance(item, dict)
         )
         if fallback_items:
             cards.append(f'<details class="cn-work-card"><summary><span>Research queue</span><strong>Missing course evidence</strong></summary><ul>{fallback_items}</ul></details>')
-    return "".join(cards) or '<p class="cn-muted">No course resources returned.</p>'
+    return "".join(cards) or '<p class="cn-muted">No learning resources returned.</p>'
 
 
 def narrative_html(repositioning: Any, closing_note: str) -> str:

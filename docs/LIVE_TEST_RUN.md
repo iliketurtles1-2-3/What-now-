@@ -98,12 +98,12 @@ Write down:
 - Time from clicking `Generate workspace` to final report.
 - Any confusing text.
 - Any screen-size/layout issue.
-- Any course recommendation that feels wrong.
+- Any learning-resource recommendation or queued search task that feels wrong.
 - Whether the final output feels like a product workspace or still like a document.
 
 ## Known Watch Items
 
 - The app still uses Gradio, so some layout behavior is framework-controlled.
 - Live companies/jobs are optional and should not block the core analysis.
-- Course matching is deterministic, but it depends on the model producing useful gap labels.
+- Learning-resource search depends on useful gap labels and a configured search provider.
 - The exact OpenRouter model slug must match OpenRouter's current model list.

@@ -15,6 +15,7 @@ Product and implementation documentation:
 - [Product architecture](docs/PRODUCT_ARCHITECTURE.md)
 - [Implementation plan and backlog](docs/IMPLEMENTATION_PLAN.md)
 - [Recommendation contract review](docs/RECOMMENDATION_CONTRACT_REVIEW.md)
+- [Prompt framework](docs/PROMPT_FRAMEWORK.md)
 
 The current runtime still reflects parts of the earlier German Markdown-report
 prototype. The linked implementation plan tracks the migration to the new
