@@ -1402,18 +1402,36 @@ def create_report(
     time_budget: str,
     learning_budget: str,
     trigger: str,
+    answer_more_of: str,
+    answer_avoid: str,
+    answer_problem_space: str,
+    answer_proof: str,
 ):
     try:
         if not profile:
             raise ValueError(CV_ERROR)
         if not adaptation or not time_budget or not learning_budget:
             raise ValueError("Please answer the three required questions.")
+        answer_values = [
+            (answer_more_of or "").strip(),
+            (answer_avoid or "").strip(),
+            (answer_problem_space or "").strip(),
+            (answer_proof or "").strip(),
+        ]
+        if not any(answer_values):
+            raise ValueError("Please answer at least one profile-specific question.")
 
+        questions = profile_questions(profile)
         interview = {
             "adaptation_level": adaptation,
             "time_budget": time_budget,
             "learning_budget": learning_budget,
             "trigger": (trigger or "").strip(),
+            "clarifying_answers": [
+                {"question": question, "answer": answer}
+                for question, answer in zip(questions, answer_values)
+                if answer
+            ],
         }
         user_payload = json.dumps({"profile": profile, "interview": interview}, ensure_ascii=False, indent=2)
         result = call_json(PROMPT_2, f"Create the career workspace from this data:\n\n{user_payload}", 8000)
@@ -1462,6 +1480,10 @@ def reset_app():
         None,
         None,
         None,
+        "",
+        "",
+        "",
+        "",
         "",
         "",
         None,
@@ -2368,6 +2390,26 @@ with gr.Blocks(title=APP_NAME) as demo:
                     with gr.Row():
                         learning_budget = gr.Radio(BUDGET_OPTIONS, label="Learning budget", interactive=True)
                         trigger = gr.Textbox(label="Trigger", placeholder="What brought you here today?", lines=4)
+                    answer_more_of = gr.Textbox(
+                        label="1. What should the next direction include more of?",
+                        placeholder="Example: more patient interaction, less routine scanning, more strategy, more technical depth...",
+                        lines=2,
+                    )
+                    answer_avoid = gr.Textbox(
+                        label="2. What should it avoid repeating?",
+                        placeholder="Example: shift work, unclear growth path, too much admin, weak mentorship...",
+                        lines=2,
+                    )
+                    answer_problem_space = gr.Textbox(
+                        label="3. Which problem space feels worth it?",
+                        placeholder="Example: radiology operations, healthtech, medical devices, climate, public policy...",
+                        lines=2,
+                    )
+                    answer_proof = gr.Textbox(
+                        label="4. What proof could you build in 30 days?",
+                        placeholder="Example: a workflow map, case note, small analysis, interview set, portfolio memo...",
+                        lines=2,
+                    )
                     report_button = gr.Button("Generate workspace", variant="primary")
                     gr.Markdown("This view stays visible while the workspace is generated.", elem_classes="privacy")
                     interview_error = gr.Markdown()
@@ -2397,7 +2439,17 @@ with gr.Blocks(title=APP_NAME) as demo:
     )
     report_button.click(
         fn=create_report,
-        inputs=[profile_state, adaptation, time_budget, learning_budget, trigger],
+        inputs=[
+            profile_state,
+            adaptation,
+            time_budget,
+            learning_budget,
+            trigger,
+            answer_more_of,
+            answer_avoid,
+            answer_problem_space,
+            answer_proof,
+        ],
         outputs=[
             interaction_panel,
             report_panel,
@@ -2429,6 +2481,10 @@ with gr.Blocks(title=APP_NAME) as demo:
             time_budget,
             learning_budget,
             trigger,
+            answer_more_of,
+            answer_avoid,
+            answer_problem_space,
+            answer_proof,
             report_markdown,
             download_button,
             upload_error,

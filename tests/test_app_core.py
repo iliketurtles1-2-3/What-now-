@@ -238,6 +238,62 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("founder support", html)
         self.assertIn("Cleantech", html)
 
+    def test_create_report_requires_and_passes_clarifying_answers(self):
+        profile = {
+            "current_role": "Radiologic Technologist",
+            "industry": "Healthcare",
+            "skills": ["MRI"],
+            "roles": [{"key_tasks": ["perform MRI exams"]}],
+        }
+        first_attempt = app.create_report(
+            profile,
+            app.ADAPTATION_OPTIONS[1],
+            app.TIME_OPTIONS[1],
+            app.BUDGET_OPTIONS[0],
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+        self.assertIn("profile-specific", first_attempt[-1])
+
+        captured_payload = {}
+
+        def fake_call_json(system_prompt, user_content, max_tokens):
+            captured_payload["content"] = user_content
+            return {
+                "perspectives": [],
+                "exposure": [],
+                "exposure_summary": "",
+                "gaps": [],
+                "plan_100": [],
+                "plan_365": [],
+                "decision_gates": [],
+                "resources": [],
+                "repositioning": {"cv_bullets": [], "linkedin_headline": ""},
+                "closing_note": "",
+            }
+
+        with patch.object(app, "call_json", fake_call_json), patch.object(app, "live_discovery", return_value={}), patch.object(
+            app, "write_report_file", return_value="report.md"
+        ):
+            app.create_report(
+                profile,
+                app.ADAPTATION_OPTIONS[1],
+                app.TIME_OPTIONS[1],
+                app.BUDGET_OPTIONS[0],
+                "I need a move.",
+                "more patient-facing advisory work",
+                "",
+                "healthtech operations",
+                "",
+            )
+
+        self.assertIn("clarifying_answers", captured_payload["content"])
+        self.assertIn("more patient-facing advisory work", captured_payload["content"])
+        self.assertIn("healthtech operations", captured_payload["content"])
+
     def test_workspace_renderer_uses_interactive_sections_not_markdown_document(self):
         html = app.render_workspace_html(
             {
