@@ -21,6 +21,15 @@ The app is model-provider agnostic through environment variables. It currently s
 - `LLM_PROVIDER=anthropic`
 - `LLM_PROVIDER=openai` for OpenAI or OpenAI-compatible APIs via `OPENAI_BASE_URL`
 
+## Development Workflow With Two Codex Instances
+
+Use a separate Git worktree for each active Codex instance. Each instance should
+work on its own branch, keep changes scoped, and commit locally without pushing.
+
+One integration instance should then review the local commits, cherry-pick or merge
+them into the integration branch, resolve conflicts, run the test suite, and push
+only after the combined branch is verified.
+
 ## Quick Start On A Linux VPS
 
 Requirements:
