@@ -610,7 +610,11 @@ body {
 footer,
 .built-with,
 .gradio-container > div:last-child img,
-.gradio-container > div:last-child svg {
+.gradio-container > div:last-child svg,
+.gradio-container [style*="position: fixed"],
+.gradio-container [class*="floating"],
+.gradio-container [class*="assistant"],
+.gradio-container [class*="bot"] {
   display: none !important;
 }
 .container {
@@ -642,17 +646,10 @@ footer,
   color: var(--cn-muted);
   font-size: 13.5px;
 }
-.upload-panel .file-preview,
-.upload-panel [data-testid="file-preview"],
-.upload-panel .upload-container,
-.upload-panel .dropzone,
-.upload-panel [class*="dropzone"] {
-  min-height: 140px !important;
-  max-height: 190px !important;
-}
 .upload-panel textarea {
-  min-height: 160px !important;
-  height: 180px !important;
+  min-height: 130px !important;
+  height: 140px !important;
+  max-height: 220px !important;
 }
 .upload-panel button {
   min-height: 42px !important;
@@ -902,7 +899,7 @@ button.primary {
   }
 }
 @media (max-width: 640px) {
-  .upload-panel {
+.upload-panel {
     padding: 20px;
     max-height: none;
   }
@@ -930,8 +927,8 @@ with gr.Blocks(title="KI-Karriere-Check", css=CSS) as demo:
         with gr.Column(elem_classes="upload-panel"):
             gr.Markdown("# KI-Karriere-Check")
             gr.Markdown("Lade deinen Lebenslauf hoch und sieh, wo KI deine Arbeit verändert, welche Lücken wirklich zählen und wie du dich positionierst.")
-            cv_file = gr.File(label="Lebenslauf als PDF hochladen", file_types=[".pdf"], file_count="single")
-            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=6, placeholder="Mindestens 300 Zeichen ...")
+            cv_file = gr.UploadButton("PDF-Lebenslauf auswählen", file_types=[".pdf"], file_count="single")
+            cv_text = gr.Textbox(label="Oder Lebenslauf als Text einfügen", lines=5, max_lines=8, placeholder="Mindestens 300 Zeichen ...")
             start_button = gr.Button("Analyse starten", variant="primary")
             gr.Markdown("Dein Lebenslauf wird nicht gespeichert. Die Analyse erfolgt einmalig über den konfigurierten KI-Anbieter.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
