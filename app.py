@@ -1222,6 +1222,9 @@ CSS = """
   --cn-alert: #e07a5b;
   --cn-line: rgba(255,255,255,.09);
 }
+html,
+body,
+gradio-app,
 .gradio-container {
   background: var(--cn-bg) !important;
   color: #eafbee !important;
@@ -1377,7 +1380,6 @@ footer,
   display: grid;
   align-content: start;
   gap: 22px;
-  background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
   padding: clamp(24px, 6vh, 56px) 0 32px;
 }
 .upload-panel {
@@ -1435,8 +1437,7 @@ footer,
 }
 .cn-shell {
   min-height: min(680px, calc(100vh - 48px));
-  background: #070d0a;
-  background-image: radial-gradient(ellipse 900px 500px at 20% 0%, rgba(30,90,55,.25), transparent 60%);
+  background: var(--cn-bg);
   padding: 28px 0 8px;
   box-sizing: border-box;
   display: flex;
