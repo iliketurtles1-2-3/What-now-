@@ -46,7 +46,18 @@ Antworte NUR mit validem JSON, exakt in diesem Schema:
     "ai_tool_signals": [string, ...],
     "languages": [string, ...]
   },
-  "teaser": [string, string, string]
+  "teaser": [string, string, string],
+  "discovery": {
+    "companies": [
+      {"name": string, "why": string}
+    ],
+    "jobs": [
+      {"title": string, "why": string}
+    ],
+    "recent_information": [
+      {"topic": string, "why_it_matters": string}
+    ]
+  }
 }
 
 Regeln für die Teaser-Beobachtungen:
@@ -56,6 +67,9 @@ Regeln für die Teaser-Beobachtungen:
 - Beobachtung 3: Eine überraschende oder nicht offensichtliche Chance, die sich aus dem Profil ergibt.
 - Sei spezifisch: beziehe dich auf konkrete Stationen/Tätigkeiten aus dem Lebenslauf, nie generisch.
 - "ai_tool_signals": alle Hinweise auf bereits vorhandene KI-Tool-Nutzung; leere Liste wenn keine.
+- "discovery.companies": genau 3 real existierende Unternehmen oder Organisationstypen, die zum Profil passen. Wenn du bei einem konkreten Namen unsicher bist, nenne stattdessen einen Organisationstyp. Keine offenen Stellen behaupten.
+- "discovery.jobs": genau 3 realistische Rollenbezeichnungen, jeweils mit kurzer Begründung aus dem Profil. Keine offenen Stellen behaupten.
+- "discovery.recent_information": genau 3 aktuelle, relevante Markt- oder KI-Entwicklungen. Keine Daten, Ereignisse oder Quellen erfinden; bei unsicherer Aktualität als beobachtbaren Trend formulieren.
 """.strip()
 
 PROMPT_2 = """
@@ -308,7 +322,36 @@ def exposure_level_for_task(task: str) -> tuple[str, str]:
     return ("mittel", "#e0c85b")
 
 
-def dashboard_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
+def discovery_rows(
+    items: Any,
+    primary_key: str,
+    secondary_key: str,
+    empty_label: str,
+) -> str:
+    rows = []
+    if isinstance(items, list):
+        for item in items[:3]:
+            if not isinstance(item, dict):
+                continue
+            primary = escape_html(item.get(primary_key))
+            secondary = escape_html(item.get(secondary_key))
+            if primary:
+                rows.append(
+                    f'<div class="cn-discovery-item"><strong>{primary}</strong>'
+                    f'<span>{secondary}</span></div>'
+                )
+    if not rows:
+        rows.append(f'<div class="cn-muted">{escape_html(empty_label)}</div>')
+    return "".join(rows)
+
+
+def dashboard_html(
+    profile: dict[str, Any],
+    teaser: list[str],
+    source_label: str,
+    discovery: dict[str, Any] | None = None,
+) -> str:
+    discovery = discovery if isinstance(discovery, dict) else {}
     role = escape_html(profile.get("current_role") or "Profil aus Lebenslauf")
     industry = escape_html(profile.get("industry") or "Branche wird aus dem Profil abgeleitet")
     years = profile.get("years_experience")
@@ -337,6 +380,18 @@ def dashboard_html(profile: dict[str, Any], teaser: list[str], source_label: str
     teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
     skill_line = " · ".join(skills) if skills else "Skills werden im Report priorisiert"
     ai_line = "KI-Signale erkannt" if ai_signals else "Noch keine KI-Tool-Signale im CV"
+    company_rows = discovery_rows(
+        discovery.get("companies"), "name", "why", "Wird nach der Analyse ergänzt"
+    )
+    job_rows = discovery_rows(
+        discovery.get("jobs"), "title", "why", "Wird nach der Analyse ergänzt"
+    )
+    information_rows = discovery_rows(
+        discovery.get("recent_information"),
+        "topic",
+        "why_it_matters",
+        "Wird nach der Analyse ergänzt",
+    )
     pressure = "MEDIUM"
     pressure_color = "#e0c85b"
     if task_candidates:
@@ -406,6 +461,22 @@ def dashboard_html(profile: dict[str, Any], teaser: list[str], source_label: str
         <h2>Zielrichtung</h2>
         <p>Wird aus Adaptionslevel, Zeitbudget und Budget abgeleitet</p>
         <div class="cn-detail">TOP FIT <span class="cn-accent-text">nach Report-Erstellung</span></div>
+      </section>
+      <section class="cn-side-card cn-discovery-card">
+        <div class="cn-kicker">COMPANIES</div>
+        <h2>Interessante Unternehmen</h2>
+        <div class="cn-discovery-list">{company_rows}</div>
+      </section>
+      <section class="cn-side-card cn-discovery-card">
+        <div class="cn-kicker">JOBS</div>
+        <h2>Interessante Rollen</h2>
+        <div class="cn-discovery-list">{job_rows}</div>
+      </section>
+      <section class="cn-side-card cn-discovery-card">
+        <div class="cn-kicker">RECENT SIGNALS</div>
+        <h2>Aktuelle Entwicklungen</h2>
+        <div class="cn-discovery-list">{information_rows}</div>
+        <p class="cn-data-note">KI-generierte Marktimpulse · keine Live-News</p>
       </section>
     </aside>
   </div>
@@ -499,11 +570,12 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
         if profile_is_empty(profile):
             raise ValueError(CV_ERROR)
         teaser = result.get("teaser", [])
+        discovery = result.get("discovery", {})
         return (
             gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=False),
-            dashboard_html(profile, teaser, "Profil aus deinem CV"),
+            dashboard_html(profile, teaser, "Profil aus deinem CV", discovery),
             profile,
             "",
         )
@@ -821,6 +893,40 @@ footer,
   gap: 6px;
   font: 500 12px JetBrains Mono, monospace;
   color: var(--cn-text);
+}
+.cn-discovery-card {
+  flex: 0 0 auto;
+}
+.cn-discovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cn-discovery-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 9px;
+  border-top: 1px solid var(--cn-line);
+}
+.cn-discovery-item:first-child {
+  padding-top: 2px;
+  border-top: 0;
+}
+.cn-discovery-item strong {
+  color: var(--cn-text);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.cn-discovery-item span {
+  color: var(--cn-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.cn-side-card .cn-data-note {
+  margin: 2px 0 0;
+  font: 500 9.5px JetBrains Mono, monospace;
+  color: var(--cn-muted);
 }
 .cn-row {
   display: flex;
