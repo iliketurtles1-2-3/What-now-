@@ -23,6 +23,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+If you previously installed dependencies with older pins, refresh the environment instead of layering new packages on top:
+
+```bash
+cd ~/ai-career-navigator
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+pip install --upgrade --upgrade-strategy eager --force-reinstall -r requirements.txt
+```
+
 Anthropic example:
 
 ```bash
@@ -124,6 +133,22 @@ sudo certbot --nginx -d your-domain.example
 - PDF upload requires `LLM_PROVIDER=anthropic` or `LLM_PROVIDER=openai` with `OPENAI_API_MODE=responses`.
 - Some OpenAI-compatible providers may not support JSON response formatting. If that happens, use Anthropic or OpenAI Responses for the CV test run.
 - Files are not persisted by the app. The markdown report download is generated in the system temp directory for the current session.
+
+## Python 3.14 Notes
+
+Ubuntu releases with Python 3.14 need modern wheels for Gradio's dependency stack. This project pins current versions of Gradio, Pillow, OpenAI, Anthropic, and `audioop-lts` to avoid the common `pyaudioop`, `HfFolder`, and Pillow build failures seen with older packages.
+
+If imports fail after a dependency update, recreate the virtual environment:
+
+```bash
+cd ~/ai-career-navigator
+deactivate 2>/dev/null || true
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
 
 ## Sample CV Text For Testing
 
