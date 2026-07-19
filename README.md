@@ -1,6 +1,20 @@
-# KI-Karriere-Check
+# AI Career Navigator
 
-Working Gradio prototype for CV analysis: upload or paste a CV, get a German teaser, answer four fixed questions, then receive a German markdown career report.
+Working Gradio prototype for CV analysis and career development.
+
+The product is being redesigned as an English, in-app career workspace. Users will
+upload or paste a CV, receive an evidence-based assessment, answer four fixed
+questions, and build a development plan with verified courses and practical
+milestones.
+
+Product and implementation documentation:
+
+- [Product architecture](docs/PRODUCT_ARCHITECTURE.md)
+- [Implementation plan and backlog](docs/IMPLEMENTATION_PLAN.md)
+
+The current runtime still reflects parts of the earlier German Markdown-report
+prototype. The linked implementation plan tracks the migration to the new
+experience.
 
 The app is model-provider agnostic through environment variables. It currently supports:
 
