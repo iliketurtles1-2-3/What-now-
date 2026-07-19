@@ -159,6 +159,33 @@ class AppCoreTests(unittest.TestCase):
         if not (app.TAVILY_API_KEY or app.SERPAPI_API_KEY):
             self.assertIn("web search not configured", sidebar)
 
+    def test_workspace_renderer_uses_interactive_sections_not_markdown_document(self):
+        html = app.render_workspace_html(
+            {
+                "exposure": [{"task": "Reporting", "rating": "red", "reasoning": "Repeatable analysis"}],
+                "exposure_summary": "Reporting can be partly automated.",
+                "gaps": [{"gap": "Workflow design", "priority": 1, "why_it_matters": "Turns tools into leverage."}],
+                "plan_100": [{"weeks": "Weeks 1-2", "focus": "Map work", "actions": ["Interview users"], "outcome": "A task map"}],
+                "plan_365": [{"quarter": "Q1", "theme": "Build proof", "milestones": ["Prototype"]}],
+                "decision_gates": [{"when": "Day 30", "question": "Is it useful?", "if_yes": "Scale", "if_no": "Narrow"}],
+                "resources": [],
+                "repositioning": {"cv_bullets": ["Built AI-assisted reporting flow"], "linkedin_headline": "AI workflow builder"},
+                "closing_note": "Keep it specific.",
+            }
+        )
+
+        self.assertIn('class="cn-workspace"', html)
+        self.assertIn("<details", html)
+        self.assertIn("Workflow design", html)
+        self.assertNotIn("# AI Career Workspace", html)
+
+    def test_header_surfaces_settings_account_and_search_status(self):
+        html = app.app_header_html()
+
+        self.assertIn("Settings", html)
+        self.assertIn("Local", html)
+        self.assertIn(app.search_status_label(), html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ from typing import Any
 
 import gradio as gr
 
-from config import ConfigError, load_runtime_settings
+from config import ConfigError, load_runtime_settings, load_settings
 from courses.matcher import match_courses
 from llm import call_json as llm_call_json
 from llm import call_model as llm_call_model
@@ -324,6 +324,59 @@ def course_suggestions(profile: dict[str, Any]) -> list[dict[str, str]]:
         }
         for item in result["recommendations"]
     ]
+
+
+def provider_status() -> dict[str, str]:
+    try:
+        settings = load_settings()
+    except ConfigError:
+        return {
+            "provider": "not configured",
+            "model": "missing",
+            "model_status": "check settings",
+        }
+    return {
+        "provider": "OpenRouter" if settings.is_openrouter else settings.provider.title(),
+        "model": settings.model,
+        "model_status": "ready" if settings.api_key else "missing key",
+    }
+
+
+def search_status_label() -> str:
+    if TAVILY_API_KEY:
+        return "Tavily ready"
+    if SERPAPI_API_KEY:
+        return "SerpAPI ready"
+    return "web search off"
+
+
+def app_header_html() -> str:
+    status = provider_status()
+    return f"""
+<header class="cn-appbar">
+  <div class="cn-brand">
+    <div class="cn-logo" aria-hidden="true">CN</div>
+    <div>
+      <strong>AI Career Navigator</strong>
+      <span>interactive career workspace</span>
+    </div>
+  </div>
+  <nav class="cn-app-actions" aria-label="Application controls">
+    <details class="cn-settings">
+      <summary>Settings</summary>
+      <div class="cn-settings-panel">
+        <div><span>Model</span><strong>{escape_html(status["provider"])} · {escape_html(status["model"])}</strong></div>
+        <div><span>Status</span><strong>{escape_html(status["model_status"])}</strong></div>
+        <div><span>Search</span><strong>{escape_html(search_status_label())}</strong></div>
+      </div>
+    </details>
+    <div class="cn-account" title="Local prototype account">
+      <span>Local</span>
+      <strong>FF</strong>
+    </div>
+  </nav>
+</header>
+"""
 
 
 def live_discovery(profile: dict[str, Any]) -> dict[str, Any]:
@@ -734,6 +787,209 @@ def render_report(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def list_html(items: Any, *, ordered: bool = False, empty: str = "No items yet.") -> str:
+    if not isinstance(items, list) or not items:
+        return f'<p class="cn-muted">{escape_html(empty)}</p>'
+    tag = "ol" if ordered else "ul"
+    rows = "".join(f"<li>{escape_html(item)}</li>" for item in items if item)
+    return f"<{tag}>{rows}</{tag}>" if rows else f'<p class="cn-muted">{escape_html(empty)}</p>'
+
+
+def exposure_cards_html(items: Any) -> str:
+    cards = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            rating = rating_label(item.get("rating", "yellow"))
+            cards.append(
+                f"""
+<article class="cn-work-card cn-exposure-card" data-rating="{escape_html(rating.lower())}">
+  <div class="cn-card-topline"><span>{escape_html(rating)}</span></div>
+  <h3>{escape_html(item.get("task") or "Task")}</h3>
+  <p>{escape_html(item.get("reasoning") or "No reasoning returned.")}</p>
+</article>
+"""
+            )
+    return "".join(cards) or '<p class="cn-muted">No exposure cards returned.</p>'
+
+
+def gaps_html(gaps: Any) -> str:
+    cards = []
+    if isinstance(gaps, list):
+        for gap in gaps:
+            if not isinstance(gap, dict):
+                continue
+            priority = escape_html(gap.get("priority") or "focus")
+            cards.append(
+                f"""
+<article class="cn-work-card">
+  <div class="cn-card-topline"><span>Priority {priority}</span></div>
+  <h3>{escape_html(gap.get("gap") or "Development gap")}</h3>
+  <p>{escape_html(gap.get("why_it_matters") or "This needs more evidence.")}</p>
+</article>
+"""
+            )
+    return "".join(cards) or '<p class="cn-muted">No gap cards returned.</p>'
+
+
+def plan_100_html(blocks: Any) -> str:
+    cards = []
+    if isinstance(blocks, list):
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            cards.append(
+                f"""
+<details class="cn-work-card cn-plan-card" open>
+  <summary>
+    <span>{escape_html(block.get("weeks") or "Next phase")}</span>
+    <strong>{escape_html(block.get("focus") or "Focus area")}</strong>
+  </summary>
+  {list_html(block.get("actions"), empty="No actions returned.")}
+  <p class="cn-outcome"><strong>Outcome:</strong> {escape_html(block.get("outcome") or "Outcome not specified.")}</p>
+</details>
+"""
+            )
+    return "".join(cards) or '<p class="cn-muted">No 100-day plan returned.</p>'
+
+
+def roadmap_html(blocks: Any, gates: Any) -> str:
+    quarters = []
+    if isinstance(blocks, list):
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            quarters.append(
+                f"""
+<article class="cn-work-card">
+  <div class="cn-card-topline"><span>{escape_html(block.get("quarter") or "Quarter")}</span></div>
+  <h3>{escape_html(block.get("theme") or "Theme")}</h3>
+  {list_html(block.get("milestones"), empty="No milestones returned.")}
+</article>
+"""
+            )
+    gate_cards = []
+    if isinstance(gates, list):
+        for gate in gates:
+            if not isinstance(gate, dict):
+                continue
+            gate_cards.append(
+                f"""
+<details class="cn-work-card cn-decision-card">
+  <summary><span>{escape_html(gate.get("when") or "Decision gate")}</span><strong>{escape_html(gate.get("question") or "Decision")}</strong></summary>
+  <div class="cn-two-column">
+    <p><strong>If yes:</strong> {escape_html(gate.get("if_yes") or "")}</p>
+    <p><strong>If no:</strong> {escape_html(gate.get("if_no") or "")}</p>
+  </div>
+</details>
+"""
+            )
+    return "".join(quarters + gate_cards) or '<p class="cn-muted">No roadmap returned.</p>'
+
+
+def course_cards_html(resources: Any, fallbacks: Any) -> str:
+    cards = []
+    if isinstance(resources, list):
+        for resource in resources:
+            if not isinstance(resource, dict):
+                continue
+            items = []
+            for bucket in ("free", "paid"):
+                for item in resource.get(bucket, []) if isinstance(resource.get(bucket), list) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    raw_url = str(item.get("url") or "")
+                    parsed_url = urllib.parse.urlparse(raw_url)
+                    href = escape_html(raw_url) if parsed_url.scheme in {"http", "https"} else ""
+                    link = (
+                        f'<a href="{href}" target="_blank" rel="noopener noreferrer">Open course</a>'
+                        if href
+                        else '<span class="cn-muted">No link</span>'
+                    )
+                    items.append(
+                        f"""
+<article class="cn-course-card">
+  <h4>{escape_html(item.get("name") or "Course")}</h4>
+  <p>{escape_html(item.get("provider") or "")} · {escape_html(item.get("format") or "")} · {escape_html(item.get("time_cost") or "")}</p>
+  <small>{escape_html(item.get("cost_estimate") or bucket.title())}</small>
+  {link}
+</article>
+"""
+                    )
+            cards.append(
+                f"""
+<details class="cn-work-card cn-resource-card" open>
+  <summary><span>Course path</span><strong>{escape_html(resource.get("gap") or "Learning gap")}</strong></summary>
+  <div class="cn-course-grid">{''.join(items) or '<p class="cn-muted">No verified courses for this gap.</p>'}</div>
+</details>
+"""
+            )
+    if isinstance(fallbacks, list) and fallbacks:
+        fallback_items = "".join(
+            f"<li>{escape_html(item.get('search_phrase') or item.get('gap') or 'Research course')}</li>"
+            for item in fallbacks
+            if isinstance(item, dict)
+        )
+        if fallback_items:
+            cards.append(f'<details class="cn-work-card"><summary><span>Research queue</span><strong>Missing course evidence</strong></summary><ul>{fallback_items}</ul></details>')
+    return "".join(cards) or '<p class="cn-muted">No course resources returned.</p>'
+
+
+def narrative_html(repositioning: Any, closing_note: str) -> str:
+    data = repositioning if isinstance(repositioning, dict) else {}
+    bullets = list_html(data.get("cv_bullets"), empty="No positioning bullets returned.")
+    headline = escape_html(data.get("linkedin_headline") or "Headline not generated.")
+    return f"""
+<section class="cn-work-card cn-narrative-card">
+  <div class="cn-card-topline"><span>Positioning</span></div>
+  <h3>{headline}</h3>
+  {bullets}
+  <p class="cn-outcome">{escape_html(closing_note)}</p>
+</section>
+"""
+
+
+def render_workspace_html(data: dict[str, Any]) -> str:
+    return f"""
+<section class="cn-workspace">
+  <nav class="cn-workspace-tabs" aria-label="Workspace sections">
+    <a href="#exposure">Exposure</a>
+    <a href="#gaps">Gaps</a>
+    <a href="#plan">100 days</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#courses">Courses</a>
+    <a href="#narrative">Narrative</a>
+  </nav>
+  <section id="exposure" class="cn-work-section">
+    <div class="cn-section-heading"><span>01</span><h2>Where AI changes the work</h2></div>
+    <p>{escape_html(data.get("exposure_summary") or "")}</p>
+    <div class="cn-card-grid">{exposure_cards_html(data.get("exposure"))}</div>
+  </section>
+  <section id="gaps" class="cn-work-section">
+    <div class="cn-section-heading"><span>02</span><h2>Development gaps</h2></div>
+    <div class="cn-card-grid">{gaps_html(data.get("gaps"))}</div>
+  </section>
+  <section id="plan" class="cn-work-section">
+    <div class="cn-section-heading"><span>03</span><h2>Your first 100 days</h2></div>
+    <div class="cn-stack">{plan_100_html(data.get("plan_100"))}</div>
+  </section>
+  <section id="roadmap" class="cn-work-section">
+    <div class="cn-section-heading"><span>04</span><h2>365-day roadmap</h2></div>
+    <div class="cn-card-grid">{roadmap_html(data.get("plan_365"), data.get("decision_gates"))}</div>
+  </section>
+  <section id="courses" class="cn-work-section">
+    <div class="cn-section-heading"><span>05</span><h2>Courses and resources</h2></div>
+    <div class="cn-stack">{course_cards_html(data.get("resources"), data.get("course_fallbacks"))}</div>
+  </section>
+  <section id="narrative" class="cn-work-section">
+    <div class="cn-section-heading"><span>06</span><h2>Narrative</h2></div>
+    {narrative_html(data.get("repositioning"), data.get("closing_note") or "")}
+  </section>
+</section>
+"""
+
+
 def markdown_to_basic_html(markdown: str) -> str:
     html_lines = []
     in_list = False
@@ -916,7 +1172,7 @@ def create_report(
         return (
             gr.update(visible=False),
             gr.update(visible=True),
-            f'<article class="cn-report-content">{markdown_to_basic_html(report)}</article>',
+            render_workspace_html(result),
             download_path,
             "",
         )
@@ -1003,6 +1259,119 @@ footer,
   padding: 24px 0 40px !important;
   align-content: start !important;
 }
+.cn-appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.cn-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.cn-brand div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cn-brand span {
+  color: var(--cn-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.cn-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--cn-accent);
+  color: #07130c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+}
+.cn-app-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.cn-settings {
+  position: relative;
+}
+.cn-settings summary,
+.cn-account {
+  min-height: 34px;
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--cn-text);
+  background: rgba(255,255,255,.03);
+  font-size: 12px;
+}
+.cn-settings summary {
+  cursor: pointer;
+  list-style: none;
+}
+.cn-settings summary::-webkit-details-marker {
+  display: none;
+}
+.cn-settings-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 10;
+  width: min(320px, calc(100vw - 32px));
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #07130c;
+  box-shadow: 0 16px 40px rgba(0,0,0,.35);
+}
+.cn-settings-panel div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--cn-line);
+  font-size: 12px;
+}
+.cn-settings-panel div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.cn-settings-panel span {
+  color: var(--cn-muted);
+}
+.cn-settings-panel strong {
+  color: var(--cn-primary);
+  text-align: right;
+}
+.cn-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cn-account span {
+  color: var(--cn-muted);
+}
+.cn-account strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(91,224,138,.16);
+  color: var(--cn-accent);
+  font-size: 11px;
+}
 .upload-shell {
   min-height: auto;
   display: grid;
@@ -1080,25 +1449,6 @@ footer,
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-.cn-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  font-weight: 600;
-  font-size: 14.5px;
-}
-.cn-logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--cn-accent);
-  color: #07130c;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
 }
 .cn-status {
   font: 500 11.5px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
@@ -1312,10 +1662,143 @@ footer,
 .cn-report-panel {
   overflow: auto;
 }
-.cn-report-content {
+.cn-report-content,
+.cn-workspace {
   color: var(--cn-text);
   font-size: 14px;
   line-height: 1.65;
+}
+.cn-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.cn-workspace-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 12px;
+  background: var(--cn-bg);
+}
+.cn-workspace-tabs a {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--cn-text);
+  text-decoration: none;
+  font-size: 12px;
+}
+.cn-workspace-tabs a:hover {
+  border-color: rgba(91,224,138,.45);
+}
+.cn-work-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+  scroll-margin-top: 54px;
+}
+.cn-section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.cn-section-heading span,
+.cn-card-topline span,
+.cn-work-card summary span {
+  color: var(--cn-muted);
+  font: 600 10px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.cn-section-heading h2 {
+  margin: 0;
+  color: var(--cn-primary);
+  font-size: 20px;
+}
+.cn-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.cn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cn-work-card {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 16px;
+  background: rgba(255,255,255,.02);
+}
+.cn-work-card h3,
+.cn-work-card h4 {
+  margin: 4px 0 8px;
+  color: var(--cn-primary);
+  line-height: 1.25;
+}
+.cn-work-card p,
+.cn-work-card ul,
+.cn-work-card ol {
+  margin: 0 0 10px;
+}
+.cn-work-card li {
+  margin: 0 0 6px;
+}
+.cn-work-card summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.cn-work-card summary strong {
+  color: var(--cn-primary);
+  font-size: 15px;
+}
+.cn-exposure-card[data-rating="high"] {
+  border-color: rgba(224,122,91,.42);
+}
+.cn-exposure-card[data-rating="medium"] {
+  border-color: rgba(224,200,91,.42);
+}
+.cn-exposure-card[data-rating="low"] {
+  border-color: rgba(91,224,138,.35);
+}
+.cn-course-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cn-course-card {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  padding: 12px;
+}
+.cn-course-card h4 {
+  font-size: 14px;
+}
+.cn-course-card small {
+  display: block;
+  color: var(--cn-muted);
+  margin-bottom: 8px;
+}
+.cn-course-card a {
+  color: var(--cn-accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.cn-two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.cn-outcome {
+  color: var(--cn-soft);
 }
 .cn-report-content h1,
 .cn-report-content h2,
@@ -1396,6 +1879,11 @@ button.primary {
   .cn-chat-panel {
     padding: 22px;
   }
+  .cn-card-grid,
+  .cn-course-grid,
+  .cn-two-column {
+    grid-template-columns: 1fr;
+  }
   .cn-shell {
     min-height: auto;
     padding-top: 18px;
@@ -1429,6 +1917,14 @@ button.primary {
   .cn-heading h1 {
     font-size: 26px;
   }
+  .cn-appbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cn-app-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
   .cn-sidebar {
     grid-template-columns: 1fr;
   }
@@ -1447,6 +1943,7 @@ with gr.Blocks(title="AI Career Navigator") as demo:
     discovery_state = gr.State({})
 
     with gr.Column(visible=True, elem_classes=["cn-container", "upload-shell"]) as screen_upload:
+        gr.HTML(app_header_html())
         with gr.Column(elem_classes="upload-panel"):
             gr.Markdown("# AI Career Navigator")
             gr.Markdown("Welcome. Paste your CV or upload a PDF, and I will turn it into a focused career workspace with AI exposure, courses, and next steps.")
@@ -1465,6 +1962,7 @@ with gr.Blocks(title="AI Career Navigator") as demo:
             upload_error = gr.Markdown(visible=True)
 
     with gr.Column(visible=False, elem_classes=["cn-container", "workspace-shell"]) as screen_workspace:
+        gr.HTML(app_header_html())
         with gr.Row(elem_classes=["cn-grid", "cn-live-layout"]):
             with gr.Column():
                 teaser_markdown = gr.HTML()
@@ -1482,7 +1980,7 @@ with gr.Blocks(title="AI Career Navigator") as demo:
                     interview_error = gr.Markdown()
                 with gr.Column(visible=False, elem_classes="report-shell") as report_panel:
                     report_markdown = gr.HTML()
-                    download_button = gr.DownloadButton("Download workspace notes")
+                    download_button = gr.DownloadButton("Export backup notes")
                     reset_button = gr.Button("New analysis")
             live_sidebar = gr.HTML()
 
