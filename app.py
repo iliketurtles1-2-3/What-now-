@@ -1263,6 +1263,11 @@ footer,
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
 }
+.workspace-shell {
+  min-height: auto !important;
+  padding: 24px 0 40px !important;
+  align-content: start !important;
+}
 .upload-shell {
   min-height: min(620px, calc(100vh - 24px));
   display: grid;
@@ -1363,6 +1368,7 @@ footer,
   gap: 22px;
   flex: 1;
   min-height: 0;
+  align-items: start;
 }
 .cn-live-layout {
   display: grid !important;
@@ -1692,7 +1698,7 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
             gr.Markdown("Your CV is not stored. The analysis runs once through your configured AI provider.", elem_classes="privacy")
             upload_error = gr.Markdown(visible=True)
 
-    with gr.Column(visible=False, elem_classes="container") as screen_workspace:
+    with gr.Column(visible=False, elem_classes=["container", "workspace-shell"]) as screen_workspace:
         with gr.Row(elem_classes=["cn-grid", "cn-live-layout"]):
             with gr.Column():
                 teaser_markdown = gr.HTML()
@@ -1730,7 +1736,7 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
         ],
         api_name=False,
         show_progress="full",
-        scroll_to_output=True,
+        scroll_to_output=False,
     )
     start_event.then(
         fn=refresh_discovery,
@@ -1745,7 +1751,7 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
         outputs=[interaction_panel, report_panel, report_markdown, download_button, interview_error],
         api_name=False,
         show_progress="full",
-        scroll_to_output=True,
+        scroll_to_output=False,
     )
     reset_button.click(
         fn=reset_app,
@@ -1771,7 +1777,7 @@ with gr.Blocks(title="AI Career Navigator", css=CSS) as demo:
             interview_error,
         ],
         api_name=False,
-        scroll_to_output=True,
+        scroll_to_output=False,
     )
 
 
