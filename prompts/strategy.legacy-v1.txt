@@ -16,6 +16,9 @@ Reply ONLY with valid JSON, exactly in this schema:
     {"task": string, "rating": "green" | "yellow" | "red", "reasoning": string}
   ],
   "exposure_summary": string,
+  "perspectives": [
+    {"name": string, "target_roles": [string, ...], "company_profile": string, "why_it_fits": string, "risks": string, "search_terms": [string, ...]}
+  ],
   "gaps": [
     {"gap": string, "why_it_matters": string}
   ],
@@ -40,6 +43,7 @@ Reply ONLY with valid JSON, exactly in this schema:
 
 QUANTITY RULES:
 - exposure: 5-8 tasks from the real profile, each with one-sentence reasoning.
+- perspectives: exactly 2-3 testable career directions before recommending jobs or companies. Each perspective must include specific target roles, the type of company where the person could work, fit evidence from the CV, risks, and search terms. Do not simply repeat the user's current job title unless Optimize explicitly makes that the best path.
 - gaps: exactly 3, but Optimize may use 2 if that is more honest.
 - plan_100: 3-4 blocks in week granularity, e.g. "Weeks 1-2", ending with a concrete artifact.
 - plan_365: 4 quarters; Q1 references the 100-day plan.

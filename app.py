@@ -174,6 +174,17 @@ def workspace_search_context(
             ]
         )
     if isinstance(strategy, dict):
+        for perspective in strategy.get("perspectives", [])[:3]:
+            if not isinstance(perspective, dict):
+                continue
+            terms.extend(
+                [
+                    str(perspective.get("name") or ""),
+                    str(perspective.get("company_profile") or ""),
+                ]
+            )
+            terms.extend(str(role) for role in perspective.get("target_roles", [])[:3])
+            terms.extend(str(term) for term in perspective.get("search_terms", [])[:4])
         for gap in strategy.get("gaps", [])[:4]:
             if isinstance(gap, dict):
                 terms.append(str(gap.get("gap") or ""))
@@ -592,6 +603,37 @@ def named_discovery_rows(items: Any, empty_label: str) -> str:
     return discovery_rows(items, "name", "why", empty_label)
 
 
+def pending_sidebar_html(profile: dict[str, Any]) -> str:
+    role = escape_html(profile.get("current_role") or "CV profile")
+    industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
+    skills = [escape_html(skill) for skill in (profile.get("skills") or [])[:4]]
+    skill_line = " · ".join(skills) if skills else "skills still need clarification"
+    return f"""
+<aside class="cn-sidebar" data-pressure="PENDING" data-pressure-color="#7fa88f">
+  <section class="cn-side-card cn-profile">
+    <div class="cn-kicker">PROFILE</div>
+    <h2>{role}</h2>
+    <p>{industry}</p>
+    <div class="cn-detail">
+      <div><span class="cn-ok">✓</span> CV parsed</div>
+      <div><span class="cn-ok">✓</span> {skill_line}</div>
+      <div class="cn-muted">- no live search yet</div>
+    </div>
+  </section>
+  <section class="cn-side-card">
+    <div class="cn-kicker">SEARCH PAUSED</div>
+    <h2>Pick a perspective first</h2>
+    <p>Jobs, companies, courses, events, people, books, and project ideas unlock after your answers create a real target direction.</p>
+    <div class="cn-detail">
+      <div>NEEDED <span class="cn-accent-text">expectations</span></div>
+      <div>NEEDED <span class="cn-accent-text">constraints</span></div>
+      <div>NEEDED <span class="cn-accent-text">no-go zones</span></div>
+    </div>
+  </section>
+</aside>
+"""
+
+
 def sidebar_html(
     profile: dict[str, Any],
     discovery: dict[str, Any] | None = None,
@@ -731,12 +773,34 @@ def sidebar_html(
 """
 
 
+def profile_questions(profile: dict[str, Any]) -> list[str]:
+    role = str(profile.get("current_role") or "your current role")
+    industry = str(profile.get("industry") or "this field")
+    skills = [str(skill) for skill in (profile.get("skills") or []) if skill]
+    skill = skills[0] if skills else "your strongest skill"
+    task = ""
+    for role_item in profile.get("roles") or []:
+        if isinstance(role_item, dict):
+            tasks = role_item.get("key_tasks") or []
+            if tasks:
+                task = str(tasks[0])
+                break
+    task = task or skill
+    return [
+        f"Which part of {role} do you want more of: {task}, strategy, people work, execution, or something else?",
+        f"What should the next role avoid repeating from your current work in {industry}?",
+        f"Which problem space would make this feel worth it: the current industry, an adjacent field, or a sharper mission?",
+        f"What proof could you realistically build in 30 days that would make someone believe your next direction?",
+    ]
+
+
 def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label: str) -> str:
     role = escape_html(profile.get("current_role") or "CV profile")
     industry = escape_html(profile.get("industry") or "Industry inferred from the CV")
     years = profile.get("years_experience")
     years_label = f"{years:g} years" if isinstance(years, (int, float)) else "experience detected"
     teaser_items = "".join(f"<li>{escape_html(item)}</li>" for item in (teaser or [])[:3])
+    question_items = "".join(f"<li>{escape_html(item)}</li>" for item in profile_questions(profile))
     return f"""
     <section class="cn-chat-panel">
       <div class="cn-accent"></div>
@@ -746,17 +810,21 @@ def dashboard_left_html(profile: dict[str, Any], teaser: list[str], source_label
       </div>
       <div class="cn-messages">
         <div class="cn-assistant">
-          Your CV is parsed. I can now see your role profile, the first change areas, and the choices that shape your career workspace.
+          Your CV is parsed. Before searching jobs or companies, I need your direction. The useful output is not a report; it is a set of testable perspectives.
           <div class="cn-chips">
-            <span>Assess exposure</span>
-            <span>Build a 100-day plan</span>
-            <span>Sharpen your narrative</span>
+            <span>Clarify direction</span>
+            <span>Test perspectives</span>
+            <span>Search after fit</span>
           </div>
         </div>
         <div class="cn-user">CV: {escape_html(source_label)}</div>
         <div class="cn-assistant">
           <strong>First observations</strong>
           <ol>{teaser_items}</ol>
+        </div>
+        <div class="cn-assistant cn-question-list">
+          <strong>Questions to answer before discovery</strong>
+          <ol>{question_items}</ol>
         </div>
       </div>
     </section>
@@ -1097,10 +1165,35 @@ def narrative_html(repositioning: Any, closing_note: str) -> str:
 """
 
 
+def perspectives_html(perspectives: Any) -> str:
+    cards = []
+    if isinstance(perspectives, list):
+        for item in perspectives:
+            if not isinstance(item, dict):
+                continue
+            roles = ", ".join(str(role) for role in item.get("target_roles", [])[:4] if role)
+            terms = ", ".join(str(term) for term in item.get("search_terms", [])[:4] if term)
+            cards.append(
+                f"""
+<article class="cn-work-card cn-perspective-card">
+  <div class="cn-card-topline"><span>Perspective</span></div>
+  <h3>{escape_html(item.get("name") or "Career perspective")}</h3>
+  <p>{escape_html(item.get("why_it_fits") or "Fit rationale missing.")}</p>
+  <p><strong>Target roles:</strong> {escape_html(roles or "Needs target roles.")}</p>
+  <p><strong>Company profile:</strong> {escape_html(item.get("company_profile") or "Needs company profile.")}</p>
+  <p><strong>Risk:</strong> {escape_html(item.get("risks") or "Needs risk statement.")}</p>
+  <small>{escape_html(terms)}</small>
+</article>
+"""
+            )
+    return "".join(cards) or '<p class="cn-muted">No perspectives returned. The next prompt pass needs to propose 2-3 target directions before discovery.</p>'
+
+
 def render_workspace_html(data: dict[str, Any]) -> str:
     return f"""
 <section class="cn-workspace">
   <nav class="cn-workspace-tabs" aria-label="Workspace windows">
+    <a href="#perspectives">Perspectives</a>
     <a href="#exposure">Exposure</a>
     <a href="#gaps">Gaps</a>
     <a href="#plan">Plan</a>
@@ -1110,6 +1203,10 @@ def render_workspace_html(data: dict[str, Any]) -> str:
     <a href="#feedback">Feedback</a>
   </nav>
   <div class="cn-window-board">
+    <section id="perspectives" class="cn-work-section cn-window cn-window-wide">
+      <div class="cn-window-bar"><span>00</span><h2>Directions to test first</h2></div>
+      <div class="cn-card-grid">{perspectives_html(data.get("perspectives"))}</div>
+    </section>
     <section id="exposure" class="cn-work-section cn-window">
       <div class="cn-window-bar"><span>01</span><h2>Where AI changes the work</h2></div>
       <p>{escape_html(data.get("exposure_summary") or "")}</p>
@@ -1246,7 +1343,7 @@ def start_analysis(uploaded_file: Any, cv_text: str | None):
             gr.update(visible=True),
             gr.update(visible=False),
             dashboard_left_html(profile, teaser, "Profile from your CV"),
-            sidebar_html(profile, {}),
+            pending_sidebar_html(profile),
             profile,
             {},
             "",
@@ -1955,6 +2052,9 @@ footer,
   background: rgba(5,8,6,.46);
   box-shadow: 0 16px 34px rgba(0,0,0,.18);
 }
+.cn-window-wide {
+  grid-column: 1 / -1;
+}
 .cn-window-bar {
   display: flex;
   align-items: baseline;
@@ -2017,6 +2117,16 @@ footer,
 .cn-work-card summary strong {
   color: var(--cn-primary);
   font-size: 15px;
+}
+.cn-question-list {
+  border-left: 2px solid rgba(91,224,138,.42);
+  padding-left: 14px;
+}
+.cn-perspective-card small {
+  display: block;
+  color: var(--cn-muted);
+  font: 500 11px ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  margin-top: 8px;
 }
 .cn-exposure-card[data-rating="high"] {
   border-color: rgba(224,122,91,.42);
@@ -2254,7 +2364,7 @@ with gr.Blocks(title=APP_NAME) as demo:
                     reset_button = gr.Button("New analysis")
             live_sidebar = gr.HTML()
 
-    start_event = start_button.click(
+    start_button.click(
         fn=start_analysis,
         inputs=[cv_file, cv_text],
         outputs=[
@@ -2271,13 +2381,6 @@ with gr.Blocks(title=APP_NAME) as demo:
         api_name=False,
         show_progress="full",
         scroll_to_output=False,
-    )
-    start_event.then(
-        fn=refresh_discovery,
-        inputs=[profile_state],
-        outputs=[live_sidebar, discovery_state],
-        api_name=False,
-        show_progress="hidden",
     )
     report_button.click(
         fn=create_report,

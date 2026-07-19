@@ -192,9 +192,65 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn("find climate roles", query)
         self.assertIn("commercial strategy", query)
 
+    def test_workspace_context_uses_perspective_search_terms(self):
+        query = app.workspace_search_context(
+            {"current_role": "Business Development Working Student", "industry": "Cleantech", "skills": ["sales"]},
+            {"adaptation_level": "Develop", "trigger": "find better target companies"},
+            {
+                "perspectives": [
+                    {
+                        "name": "Climate partnerships operator",
+                        "target_roles": ["Partnerships Associate", "Ecosystem Manager"],
+                        "company_profile": "B2B climate software companies selling to energy teams",
+                        "search_terms": ["climate partnerships jobs", "energy transition ecosystem roles"],
+                    }
+                ],
+                "gaps": [{"gap": "commercial discovery"}],
+            },
+        )
+
+        self.assertIn("Climate partnerships operator", query)
+        self.assertIn("Partnerships Associate", query)
+        self.assertIn("climate partnerships jobs", query)
+
+    def test_pending_sidebar_pauses_discovery_before_perspective(self):
+        sidebar = app.pending_sidebar_html(
+            {"current_role": "Coordinator", "industry": "Energy", "skills": ["stakeholder management"]}
+        )
+
+        self.assertIn("SEARCH PAUSED", sidebar)
+        self.assertIn("Pick a perspective first", sidebar)
+        self.assertNotIn("Specific openings", sidebar)
+
+    def test_dashboard_asks_profile_specific_drilldown_questions(self):
+        html = app.dashboard_left_html(
+            {
+                "current_role": "Business Development Working Student",
+                "industry": "Cleantech",
+                "skills": ["market research"],
+                "roles": [{"key_tasks": ["founder support"]}],
+            },
+            ["You connect partnerships and research."],
+            "Profile from your CV",
+        )
+
+        self.assertIn("Questions to answer before discovery", html)
+        self.assertIn("founder support", html)
+        self.assertIn("Cleantech", html)
+
     def test_workspace_renderer_uses_interactive_sections_not_markdown_document(self):
         html = app.render_workspace_html(
             {
+                "perspectives": [
+                    {
+                        "name": "Climate partnerships operator",
+                        "target_roles": ["Partnerships Associate"],
+                        "company_profile": "B2B climate companies",
+                        "why_it_fits": "Uses research and stakeholder work.",
+                        "risks": "Needs clearer commercial proof.",
+                        "search_terms": ["climate partnerships"],
+                    }
+                ],
                 "exposure": [{"task": "Reporting", "rating": "red", "reasoning": "Repeatable analysis"}],
                 "exposure_summary": "Reporting can be partly automated.",
                 "gaps": [{"gap": "Workflow design", "priority": 1, "why_it_matters": "Turns tools into leverage."}],
@@ -210,6 +266,8 @@ class AppCoreTests(unittest.TestCase):
         self.assertIn('class="cn-workspace"', html)
         self.assertIn('class="cn-window-board"', html)
         self.assertIn("<details", html)
+        self.assertIn("Directions to test first", html)
+        self.assertIn("Climate partnerships operator", html)
         self.assertIn("Workflow design", html)
         self.assertIn("What to challenge next", html)
         self.assertNotIn("# AI Career Workspace", html)
